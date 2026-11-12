@@ -121,6 +121,88 @@ class AndroidCalendarRepositoryTest {
         awaitTestCalendarCount(accounts, 1)
     }
 
+    @Test
+    fun activatingStoresCalendarWithItsAccount() = runBlocking {
+        val calendar = Calendar(id = 1, name = "Work", color = RED)
+        val account = CalendarAccount(id = "$ACCOUNT_TYPE/$ACCOUNT_A", name = ACCOUNT_A, calendars = listOf(calendar))
+
+        repository.setCalendarActive(account, calendar, active = true)
+
+        assertEquals(listOf(account), repository.observeActiveCalendars().first())
+    }
+
+    @Test
+    fun deactivatingLastCalendarRemovesAccount() = runBlocking {
+        val work = Calendar(id = 1, name = "Work", color = RED)
+        val personal = Calendar(id = 2, name = "Personal", color = BLUE)
+        val account = CalendarAccount(id = "$ACCOUNT_TYPE/$ACCOUNT_A", name = ACCOUNT_A, calendars = listOf(personal, work))
+        repository.setCalendarActive(account, work, active = true)
+        repository.setCalendarActive(account, personal, active = true)
+
+        repository.setCalendarActive(account, work, active = false)
+        assertEquals(
+            listOf(account.copy(calendars = listOf(personal))),
+            repository.observeActiveCalendars().first(),
+        )
+
+        repository.setCalendarActive(account, personal, active = false)
+        assertEquals(emptyList<CalendarAccount>(), repository.observeActiveCalendars().first())
+    }
+
+    @Test
+    fun syncRemovesDeletedCalendarsAndEmptyAccounts() = runBlocking {
+        grantPermission()
+        val workId = insertCalendar(ACCOUNT_A, "Work", RED)
+        val personalId = insertCalendar(ACCOUNT_A, "Personal", BLUE)
+        val holidaysId = insertCalendar(ACCOUNT_B, "Holidays", GREEN)
+        val accounts = testAccounts(withTimeout(TIMEOUT_MS) { repository.observeAccounts().first() })
+        accounts.forEach { account ->
+            account.calendars.forEach { repository.setCalendarActive(account, it, active = true) }
+        }
+
+        deleteCalendar(ACCOUNT_A, personalId)
+        deleteCalendar(ACCOUNT_B, holidaysId)
+        repository.syncActiveCalendars()
+
+        assertEquals(
+            listOf(
+                CalendarAccount(
+                    id = "$ACCOUNT_TYPE/$ACCOUNT_A",
+                    name = ACCOUNT_A,
+                    calendars = listOf(Calendar(id = workId, name = "Work", color = RED)),
+                ),
+            ),
+            testAccounts(repository.observeActiveCalendars().first()),
+        )
+    }
+
+    @Test
+    fun syncUpdatesNameAndColor() = runBlocking {
+        grantPermission()
+        val workId = insertCalendar(ACCOUNT_A, "Work", RED)
+        val account = CalendarAccount(id = "$ACCOUNT_TYPE/$ACCOUNT_A", name = ACCOUNT_A, calendars = emptyList())
+        // Stored with outdated name and color
+        repository.setCalendarActive(account, Calendar(id = workId, name = "Old", color = BLUE), active = true)
+
+        repository.syncActiveCalendars()
+
+        assertEquals(
+            listOf(account.copy(calendars = listOf(Calendar(id = workId, name = "Work", color = RED)))),
+            testAccounts(repository.observeActiveCalendars().first()),
+        )
+    }
+
+    @Test
+    fun syncDoesNothingWithoutPermission() = runBlocking {
+        val calendar = Calendar(id = 123_456, name = "Work", color = RED)
+        val account = CalendarAccount(id = "$ACCOUNT_TYPE/$ACCOUNT_A", name = ACCOUNT_A, calendars = listOf(calendar))
+        repository.setCalendarActive(account, calendar, active = true)
+
+        repository.syncActiveCalendars()
+
+        assertEquals(listOf(account), repository.observeActiveCalendars().first())
+    }
+
     private fun testAccounts(accounts: List<CalendarAccount>?) =
         accounts.orEmpty().filter { it.name in TEST_ACCOUNTS }
 
@@ -154,6 +236,10 @@ class AndroidCalendarRepositoryTest {
             .find(output)
             ?.groupValues?.get(1)?.toLong()
             ?: error("Calendar $name of $account not found after insert:\n$output")
+    }
+
+    private fun deleteCalendar(account: String, id: Long) {
+        shell("content", "delete", "--uri", syncAdapterUri(account), "--where", "_id=$id")
     }
 
     private fun deleteTestCalendars() {

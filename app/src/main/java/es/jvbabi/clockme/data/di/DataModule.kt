@@ -12,6 +12,7 @@ import org.koin.dsl.module
 
 val dataModule = module {
     single { ClockMeDatabase.create(androidContext()) }
+    single { get<ClockMeDatabase>().activeCalendarDao() }
 
     singleOf(::AndroidPermissionRepository) { bind<PermissionRepository>() }
     singleOf(::AndroidCalendarRepository) { bind<CalendarRepository>() }

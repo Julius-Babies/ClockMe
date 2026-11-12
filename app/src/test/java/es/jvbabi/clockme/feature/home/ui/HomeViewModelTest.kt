@@ -71,4 +71,33 @@ class HomeViewModelTest {
         calendarRepository.accounts.value = emptyList()
         assertEquals(emptyList<CalendarAccount>(), viewModel.uiState.value.accounts)
     }
+
+    @Test
+    fun clickingCalendarTogglesIt() = runTest {
+        val calendar = Calendar(id = 1, name = "Personal", color = 0xFF0000FF.toInt())
+        val account = CalendarAccount(id = "LOCAL/Device", name = "Device", calendars = listOf(calendar))
+        val calendarRepository = FakeCalendarRepository(listOf(account))
+        val viewModel = HomeViewModel(FakePermissionRepository(PermissionStatus.Granted), calendarRepository)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
+
+        viewModel.onCalendarClick(account, calendar)
+        assertEquals(setOf(1L), viewModel.uiState.value.activeCalendarIds)
+        assertEquals(listOf(account), calendarRepository.activeCalendars.value)
+
+        viewModel.onCalendarClick(account, calendar)
+        assertEquals(emptySet<Long>(), viewModel.uiState.value.activeCalendarIds)
+        assertEquals(emptyList<CalendarAccount>(), calendarRepository.activeCalendars.value)
+    }
+
+    @Test
+    fun syncsActiveCalendarsWhenDeviceCalendarsChange() = runTest {
+        val calendarRepository = FakeCalendarRepository()
+        HomeViewModel(FakePermissionRepository(PermissionStatus.Granted), calendarRepository)
+        assertEquals(1, calendarRepository.syncCount)
+
+        calendarRepository.accounts.value = listOf(
+            CalendarAccount(id = "LOCAL/Device", name = "Device", calendars = emptyList()),
+        )
+        assertEquals(2, calendarRepository.syncCount)
+    }
 }

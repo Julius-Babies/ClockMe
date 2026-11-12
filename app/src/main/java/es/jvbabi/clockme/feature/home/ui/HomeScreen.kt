@@ -10,7 +10,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -21,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -42,11 +45,14 @@ fun HomeScreen(
             HomeEvent.NavigateToOnboarding -> onNavigateToOnboarding()
         }
     }
-    HomeContent(uiState = uiState)
+    HomeContent(uiState = uiState, onCalendarClick = viewModel::onCalendarClick)
 }
 
 @Composable
-private fun HomeContent(uiState: HomeUiState) {
+private fun HomeContent(
+    uiState: HomeUiState,
+    onCalendarClick: (CalendarAccount, Calendar) -> Unit,
+) {
     Scaffold { innerPadding ->
         val accounts = uiState.accounts
         when {
@@ -73,7 +79,13 @@ private fun HomeContent(uiState: HomeUiState) {
                 }
                 accounts.forEach { account ->
                     item(key = account.id) { AccountHeader(account) }
-                    items(account.calendars, key = { it.id }) { CalendarRow(it) }
+                    items(account.calendars, key = { it.id }) { calendar ->
+                        CalendarRow(
+                            calendar = calendar,
+                            active = calendar.id in uiState.activeCalendarIds,
+                            onClick = { onCalendarClick(account, calendar) },
+                        )
+                    }
                 }
             }
         }
@@ -91,11 +103,12 @@ private fun AccountHeader(account: CalendarAccount) {
 }
 
 @Composable
-private fun CalendarRow(calendar: Calendar) {
+private fun CalendarRow(calendar: Calendar, active: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .toggleable(value = active, role = Role.Checkbox, onValueChange = { onClick() })
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -104,7 +117,13 @@ private fun CalendarRow(calendar: Calendar) {
                 .size(16.dp)
                 .background(Color(calendar.color), CircleShape),
         )
-        Text(calendar.name, style = MaterialTheme.typography.bodyLarge)
+        Text(
+            text = calendar.name,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+        )
+        // Click is handled by the row
+        Checkbox(checked = active, onCheckedChange = null)
     }
 }
 
@@ -131,7 +150,9 @@ private fun HomeContentPreview() {
                         ),
                     ),
                 ),
+                activeCalendarIds = setOf(2),
             ),
+            onCalendarClick = { _, _ -> },
         )
     }
 }

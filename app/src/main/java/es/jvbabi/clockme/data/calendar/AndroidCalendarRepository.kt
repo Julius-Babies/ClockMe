@@ -1,11 +1,16 @@
 package es.jvbabi.clockme.data.calendar
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.CalendarContract.Calendars
+import androidx.core.content.ContextCompat
+import es.jvbabi.clockme.data.calendar.local.ActiveCalendarDao
+import es.jvbabi.clockme.data.calendar.local.ActiveCalendarEntity
+import es.jvbabi.clockme.data.calendar.local.CalendarAccountEntity
 import es.jvbabi.clockme.data.permission.AppPermission
 import es.jvbabi.clockme.data.permission.PermissionRepository
 import es.jvbabi.clockme.data.permission.PermissionStatus
@@ -21,10 +26,12 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 class AndroidCalendarRepository(
     private val context: Context,
     private val permissionRepository: PermissionRepository,
+    private val activeCalendarDao: ActiveCalendarDao,
 ) : CalendarRepository {
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -35,13 +42,55 @@ class AndroidCalendarRepository(
             .flatMapLatest { granted ->
                 if (granted) {
                     observeChanges(Calendars.CONTENT_URI)
-                        .map { queryAccounts() }
+                        .map { queryAccounts().orEmpty() }
                         .flowOn(Dispatchers.IO)
                 } else {
                     flowOf(emptyList())
                 }
             }
             .distinctUntilChanged()
+
+    override fun observeActiveCalendars(): Flow<List<CalendarAccount>> =
+        activeCalendarDao.observeAccountsWithCalendars().map { accounts ->
+            accounts.map { (account, calendars) ->
+                CalendarAccount(
+                    id = account.id,
+                    name = account.name,
+                    calendars = calendars
+                        .sortedBy { it.name }
+                        .map { Calendar(id = it.id, name = it.name, color = it.color) },
+                )
+            }
+        }
+
+    override suspend fun setCalendarActive(
+        account: CalendarAccount,
+        calendar: Calendar,
+        active: Boolean,
+    ) {
+        if (active) {
+            activeCalendarDao.activate(account.toEntity(), calendar.toEntity(account))
+        } else {
+            activeCalendarDao.deactivate(calendar.id)
+        }
+    }
+
+    override suspend fun syncActiveCalendars() {
+        val hasPermission = ContextCompat.checkSelfPermission(
+            context,
+            AppPermission.READ_CALENDAR.manifestName,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!hasPermission) return
+
+        // null if the provider couldn't be queried, don't delete anything in that case
+        val accounts = withContext(Dispatchers.IO) { queryAccounts() } ?: return
+        val existing = accounts.flatMap { account ->
+            account.calendars.map { calendar ->
+                calendar.id to (account.toEntity() to calendar.toEntity(account))
+            }
+        }.toMap()
+        activeCalendarDao.sync(existing)
+    }
 
     /** Emits once immediately and again on every change of [uri]. */
     private fun observeChanges(uri: Uri): Flow<Unit> = callbackFlow {
@@ -55,14 +104,15 @@ class AndroidCalendarRepository(
         awaitClose { context.contentResolver.unregisterContentObserver(observer) }
     }.buffer(Channel.CONFLATED)
 
-    private fun queryAccounts(): List<CalendarAccount> {
+    /** Returns `null` if the calendar provider couldn't be queried. */
+    private fun queryAccounts(): List<CalendarAccount>? {
         val cursor = context.contentResolver.query(
             Calendars.CONTENT_URI,
             PROJECTION,
             null,
             null,
             "${Calendars.ACCOUNT_NAME} ASC, ${Calendars.CALENDAR_DISPLAY_NAME} ASC",
-        ) ?: return emptyList()
+        ) ?: return null
 
         data class Row(val accountType: String, val accountName: String, val calendar: Calendar)
 
@@ -95,6 +145,15 @@ class AndroidCalendarRepository(
                 )
             }
     }
+
+    private fun CalendarAccount.toEntity() = CalendarAccountEntity(id = id, name = name)
+
+    private fun Calendar.toEntity(account: CalendarAccount) = ActiveCalendarEntity(
+        id = id,
+        accountId = account.id,
+        name = name,
+        color = color,
+    )
 
     private companion object {
         val PROJECTION = arrayOf(

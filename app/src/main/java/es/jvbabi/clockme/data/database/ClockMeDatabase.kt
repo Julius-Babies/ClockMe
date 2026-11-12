@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room3.Database
 import androidx.room3.Room
 import androidx.room3.RoomDatabase
+import es.jvbabi.clockme.data.calendar.local.ActiveCalendarDao
 import es.jvbabi.clockme.data.calendar.local.ActiveCalendarEntity
 import es.jvbabi.clockme.data.calendar.local.CalendarAccountEntity
 
@@ -20,6 +21,8 @@ import es.jvbabi.clockme.data.calendar.local.CalendarAccountEntity
     exportSchema = false,
 )
 abstract class ClockMeDatabase : RoomDatabase() {
+
+    abstract fun activeCalendarDao(): ActiveCalendarDao
 
     companion object {
         private const val NAME = "clockme.db"
