@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Debug builds only: green instead of navy (plus an outlined logo) is what tells a
+      development build apart on the launcher and on the splash screen.
+    -->
+    <color name="brand">#FF43B600</color>
+</resources>
