@@ -1,9 +1,14 @@
 package es.jvbabi.clockme.di
 
+import es.jvbabi.clockme.core.di.coreModule
+import es.jvbabi.clockme.data.di.dataModule
+import es.jvbabi.clockme.feature.home.di.homeModule
 import org.koin.dsl.module
 
 val appModule = module {
-    // Register dependencies here, e.g.:
-    // singleOf(::MyRepository)
-    // viewModelOf(::MyViewModel)
+    includes(
+        coreModule,
+        dataModule,
+        homeModule,
+    )
 }
