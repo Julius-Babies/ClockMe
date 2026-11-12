@@ -23,6 +23,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            // So a debug build can sit next to an installed release one.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
             optimization {
                 enable = true

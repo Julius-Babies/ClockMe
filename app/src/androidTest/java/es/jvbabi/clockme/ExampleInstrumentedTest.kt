@@ -19,6 +19,6 @@ class ExampleInstrumentedTest {
     fun useAppContext() {
         // Context of the app under test.
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
-        assertEquals("es.jvbabi.clockme", appContext.packageName)
+        assertEquals("es.jvbabi.clockme.debug", appContext.packageName)
     }
 }
