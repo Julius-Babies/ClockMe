@@ -66,6 +66,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // java.time below API 26, used by kotlinx-datetime
+        isCoreLibraryDesugaringEnabled = true
     }
     testOptions {
         execution = "ANDROIDX_TEST_ORCHESTRATOR"
@@ -76,6 +78,7 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
@@ -89,6 +92,7 @@ dependencies {
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.datetime)
     implementation(libs.phosphor.icons)
     implementation(libs.androidx.room.runtime)
     ksp(libs.androidx.room.compiler)

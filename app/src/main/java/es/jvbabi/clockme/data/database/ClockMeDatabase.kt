@@ -7,6 +7,8 @@ import androidx.room3.RoomDatabase
 import es.jvbabi.clockme.data.calendar.local.ActiveCalendarDao
 import es.jvbabi.clockme.data.calendar.local.ActiveCalendarEntity
 import es.jvbabi.clockme.data.calendar.local.CalendarAccountEntity
+import es.jvbabi.clockme.data.keyvalue.local.KeyValueDao
+import es.jvbabi.clockme.data.keyvalue.local.KeyValueEntity
 
 /**
  * There are no migrations: on a schema change, bump [version] and the database is rebuilt
@@ -16,13 +18,16 @@ import es.jvbabi.clockme.data.calendar.local.CalendarAccountEntity
     entities = [
         CalendarAccountEntity::class,
         ActiveCalendarEntity::class,
+        KeyValueEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class ClockMeDatabase : RoomDatabase() {
 
     abstract fun activeCalendarDao(): ActiveCalendarDao
+
+    abstract fun keyValueDao(): KeyValueDao
 
     companion object {
         private const val NAME = "clockme.db"
