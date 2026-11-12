@@ -88,9 +88,9 @@
     <target android:name="segments">
         <aapt:attr name="android:animation">
             <set android:ordering="together">
-                <objectAnimator android:propertyName="rotation" android:valueType="floatType" android:valueFrom="0" android:valueTo="-120" android:startOffset="150" android:duration="650">
+                <objectAnimator android:propertyName="rotation" android:valueType="floatType" android:valueFrom="0" android:valueTo="-90" android:startOffset="0" android:duration="800">
                     <aapt:attr name="android:interpolator">
-                        <pathInterpolator android:controlX1="0.2" android:controlY1="0.0" android:controlX2="0.0" android:controlY2="1.0" />
+                        <pathInterpolator android:controlX1="0.4" android:controlY1="0.0" android:controlX2="0.2" android:controlY2="1.0" />
                     </aapt:attr>
                 </objectAnimator>
             </set>

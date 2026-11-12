@@ -153,7 +153,10 @@ STANDARD = (0.2, 0.0, 0.0, 1.0)
 
 N_SAMPLES = 12
 # Segmente drehen sich beim Zusammenwachsen gegen den Uhrzeigersinn (Gruppenrotation, gleiche Easing-Kurve)
-CLOSE_SPIN = -120
+# Über die ganze Phase verteilt und sanft, sonst wirkt die Drehung durch die fast gleich verteilten Lücken
+# wie im Uhrzeigersinn (Wagenrad-Effekt).
+CLOSE_SPIN = -90
+SPIN_EASE = (0.4, 0.0, 0.2, 1.0)
 close_times = [CLOSE_START + round((CLOSE_END - CLOSE_START) * i / N_SAMPLES) for i in range(N_SAMPLES + 1)]
 close_ease = bezier(*CLOSE_EASE)
 close_frames = [ring_segments(close_ease(i / N_SAMPLES)) for i in range(N_SAMPLES + 1)]
@@ -186,9 +189,8 @@ def svg_static(color="#000", outline=False):
 def svg_anim(color, spinner):
     total = UNWIND_END + (SPIN if spinner else 0)
     s = lambda ms: f"{ms / 1000:g}s"
-    close_kt = f"0;{CLOSE_START / CLOSE_END:.4f};1"
     out = [f'<g><animateTransform attributeName="transform" type="rotate" dur="{s(CLOSE_END)}" fill="freeze" calcMode="spline" '
-           f'keyTimes="{close_kt}" keySplines="0 0 1 1;{ks(CLOSE_EASE)}" values="0 {C:g} {C:g};0 {C:g} {C:g};{CLOSE_SPIN} {C:g} {C:g}"/>']
+           f'keyTimes="0;1" keySplines="{ks(SPIN_EASE)}" values="0 {C:g} {C:g};{CLOSE_SPIN} {C:g} {C:g}"/>']
     for i in range(3):
         vals = [close_frames[0][i]] + [f[i] for f in close_frames]
         times = [0] + close_times
@@ -249,7 +251,8 @@ def brand_page():
               ("Launcher-Skalierung", f"{ICON_SCALE}"), ("Splash-Skalierung", f"{SPLASH_SCALE}")]
     rows = "".join(f"<tr><th>{k}</th><td>{v}</td></tr>" for k, v in params)
     timeline = [(f"0–{HANDS_END} ms", "L blendet aus, Strichstärke geht auf 0"),
-                (f"{CLOSE_START}–{CLOSE_END} ms", f"Segmente drehen sich um {-CLOSE_SPIN}° gegen den Uhrzeigersinn und wachsen zum Ring zusammen"),
+                (f"0–{CLOSE_END} ms", f"Segmente drehen sich um {-CLOSE_SPIN}° gegen den Uhrzeigersinn"),
+                (f"{CLOSE_START}–{CLOSE_END} ms", "Lücken und C-Öffnung schließen sich, Segmente wachsen zum Ring zusammen"),
                 (f"{CLOSE_END}–{UNWIND_END} ms", "Ring läuft bis auf den ersten Frame des M3-Indicators ab (36°-Bogen ab 3 Uhr)"),
                 (f"{UNWIND_END}–{UNWIND_END + SPIN} ms", "ein voller Zyklus des M3 indeterminate CircularProgressIndicator")]
     tl = "".join(f"<li><b>{a}</b> {b}</li>" for a, b in timeline)
@@ -344,7 +347,7 @@ document.getElementById('replay').addEventListener('click', mount);
 
 # ---------------------------------------------------------------- Android
 NS = 'xmlns:android="http://schemas.android.com/apk/res/android"'
-ICON_SCALE = 0.66           # Launcher: Logo deutlich innerhalb der Safe Zone (r 33)
+ICON_SCALE = 0.56           # Launcher: Außenradius 23.8, gut 2/3 der Safe Zone (r 33)
 SPLASH_SCALE = 0.75         # Splash: Außenradius 31.9 < 36 (2/3-Kreis der Icon-Fläche)
 
 def write(rel, content):
@@ -384,8 +387,8 @@ for src, outline in (("main", False), ("debug", True)):
     write(f"{res}/drawable/ic_launcher_foreground.xml", vector(scaled(logo_paths("#FFFFFFFF", outline), ICON_SCALE), comment=GEN))
     write(f"{res}/drawable/ic_launcher_monochrome.xml", vector(scaled(logo_paths("#FFFFFFFF", outline), ICON_SCALE), comment=GEN))
     # Legacy-Icons (API 24/25)
-    for name, shape, scale in (("ic_launcher", "M24,0h60a24,24 0 0 1 24,24v60a24,24 0 0 1 -24,24h-60a24,24 0 0 1 -24,-24v-60a24,24 0 0 1 24,-24z", 0.9),
-                               ("ic_launcher_round", "M54,0a54,54 0 1 1 0,108a54,54 0 1 1 0,-108z", 0.85)):
+    for name, shape, scale in (("ic_launcher", "M24,0h60a24,24 0 0 1 24,24v60a24,24 0 0 1 -24,24h-60a24,24 0 0 1 -24,-24v-60a24,24 0 0 1 24,-24z", 0.78),
+                               ("ic_launcher_round", "M54,0a54,54 0 1 1 0,108a54,54 0 1 1 0,-108z", 0.74)):
         body = f'    <path android:pathData="{shape}" android:fillColor="@color/brand" />\n' + scaled(logo_paths("#FFFFFFFF", outline), scale)
         write(f"{res}/mipmap-anydpi/{name}.xml", vector(body, size=48, comment=GEN))
 
@@ -413,7 +416,7 @@ for i in range(3):
          for j in range(N_SAMPLES)]
     a.append(anim("fillAlpha", 1, 0, CLOSE_END, 0))
     targets.append(target(f"segment{i}", a))
-targets.append(target("segments", [anim("rotation", 0, CLOSE_SPIN, CLOSE_START, CLOSE_END - CLOSE_START, interp=CLOSE_EASE)]))
+targets.append(target("segments", [anim("rotation", 0, CLOSE_SPIN, 0, CLOSE_END, interp=SPIN_EASE)]))
 targets.append(target("hands", [anim("strokeWidth", S0, 0, 0, HANDS_END, interp=HANDS_EASE),
                                 anim("strokeAlpha", 1, 0, 0, HANDS_END, interp=HANDS_EASE)]))
 targets.append(target("ring", [anim("strokeAlpha", 0, 1, CLOSE_END, 0),
