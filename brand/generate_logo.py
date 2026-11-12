@@ -458,3 +458,15 @@ write("main/res/drawable/splash_animated.xml", splash)
 print("total splash ms", UNWIND_END + SPIN)
 
 open(os.path.join(SVG_OUT, "index.html"), "w").write(brand_page())
+
+# IntelliJ / Android Studio project icon (Prod-Logo auf Markenfarbe)
+def idea_icon():
+    logo = files["clockme.svg"].replace('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">', "").replace("</svg>", "")
+    logo = logo.replace('"#000"', '"#FFFFFF"')
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 108 108">'
+            f'<rect width="108" height="108" rx="24" fill="{BRAND_COLORS[0][1]}"/>'
+            f'<g transform="translate(54 54) scale(0.8) translate(-54 -54)">{logo}</g></svg>\n')
+
+IDEA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".idea")
+os.makedirs(IDEA_DIR, exist_ok=True)
+open(os.path.join(IDEA_DIR, "icon.svg"), "w").write(idea_icon())
