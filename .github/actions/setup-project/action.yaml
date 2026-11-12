@@ -1,0 +1,51 @@
+name: "Setup Project"
+description: "Common setup steps for CI"
+
+inputs:
+  keystore_file:
+    description: "Base64 encoded keystore file (optional, only needed for signed release builds)"
+    required: false
+    default: ""
+  keystore_password:
+    description: "Password for the keystore"
+    required: false
+    default: ""
+  keystore_alias:
+    description: "Key alias inside the keystore"
+    required: false
+    default: "key0"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Prepare JDK
+      uses: actions/setup-java@v5
+      with:
+        java-version: 21
+        distribution: temurin
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v5
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Restore Keystore and Configure Properties
+      if: ${{ inputs.keystore_file != '' }}
+      shell: bash
+      env:
+        KEYSTORE_FILE: ${{ inputs.keystore_file }}
+        KEYSTORE_PASSWORD: ${{ inputs.keystore_password }}
+        KEYSTORE_ALIAS: ${{ inputs.keystore_alias }}
+      run: |
+        echo "$KEYSTORE_FILE" | base64 -d > "${RUNNER_TEMP}/keystore.jks"
+        {
+          echo "signing.default.file=${RUNNER_TEMP}/keystore.jks"
+          echo "signing.default.storepassword=${KEYSTORE_PASSWORD}"
+          echo "signing.default.keyalias=${KEYSTORE_ALIAS}"
+          echo "signing.default.keypassword=${KEYSTORE_PASSWORD}"
+        } >> local.properties
+
+    - name: Make gradlew executable
+      shell: bash
+      run: chmod +x ./gradlew

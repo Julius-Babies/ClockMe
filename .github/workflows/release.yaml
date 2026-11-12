@@ -1,0 +1,59 @@
+name: App release
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    name: Tests
+    uses: ./.github/workflows/tests.yaml
+
+  release:
+    name: Build and release
+    needs: tests
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup-project
+        name: Setup Project
+        with:
+          keystore_file: ${{ secrets.KEYSTORE_FILE }}
+          keystore_password: ${{ secrets.KEYSTORE_PASSWORD }}
+
+      - name: Build the app
+        run: ./gradlew assembleRelease
+
+      - name: Export APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClockMe
+          path: app/build/outputs/apk/release/app-release.apk
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: Set release name and tag
+        run: |
+          echo "DATE=$(TZ=Europe/Berlin date '+%d.%m.%Y %H:%M')" >> "$GITHUB_ENV"
+          echo "TAG_DATE=$(TZ=Europe/Berlin date '+%Y%m%d_%H-%M')" >> "$GITHUB_ENV"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/app-release.apk
+          draft: false
+          prerelease: false
+          make_latest: true
+          name: ClockMe (${{ env.DATE }})
+          fail_on_unmatched_files: true
+          tag_name: v${{ env.TAG_DATE }}
+          target_commitish: ${{ github.sha }}

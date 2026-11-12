@@ -1,13 +1,39 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
 
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+val signingKeys = listOf(
+    "signing.default.file",
+    "signing.default.storepassword",
+    "signing.default.keyalias",
+    "signing.default.keypassword",
+)
+
 android {
     namespace = "es.jvbabi.clockme"
     compileSdk {
         version = release(37)
+    }
+
+    // Release signing comes from local.properties (written by CI from repository secrets).
+    if (signingKeys.all { localProperties.containsKey(it) }) {
+        signingConfigs {
+            create("default") {
+                storeFile = file(localProperties.getProperty("signing.default.file"))
+                storePassword = localProperties.getProperty("signing.default.storepassword")
+                keyAlias = localProperties.getProperty("signing.default.keyalias")
+                keyPassword = localProperties.getProperty("signing.default.keypassword")
+            }
+        }
     }
 
     defaultConfig {
@@ -29,6 +55,7 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
+            signingConfig = signingConfigs.findByName("default")
             optimization {
                 enable = true
                 packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
