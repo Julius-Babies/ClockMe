@@ -9,6 +9,7 @@ import es.jvbabi.clockme.data.calendar.EventSegment
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.datetime.LocalDate
 import kotlin.time.Instant
@@ -77,7 +78,10 @@ class FakeCalendarRepository(
     }
 
     override fun observeEventSegments(): Flow<List<EventSegment>> =
-        MutableStateFlow(storedSegments.value.values.flatten())
+        storedSegments.map { it.values.flatten() }
+
+    override fun observeEventSegments(from: LocalDate, to: LocalDate): Flow<List<EventSegment>> =
+        storedSegments.map { stored -> stored.values.flatten().filter { it.date in from..to } }
 
     override fun observeDailyMinutes(): Flow<List<DailyCalendarMinutes>> =
         MutableStateFlow(storedDailyMinutes.value.values.flatten())

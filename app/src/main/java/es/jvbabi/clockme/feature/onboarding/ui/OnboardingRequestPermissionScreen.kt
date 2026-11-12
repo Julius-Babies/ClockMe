@@ -10,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,6 +21,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import es.jvbabi.clockme.R
+import es.jvbabi.clockme.core.ui.LocalAppStartState
 import es.jvbabi.clockme.core.ui.ObserveAsEvents
 import es.jvbabi.clockme.data.permission.PermissionStatus
 import es.jvbabi.clockme.ui.theme.ClockMeTheme
@@ -32,6 +34,10 @@ fun OnboardingRequestPermissionScreen(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val appStart = LocalAppStartState.current
+    LaunchedEffect(uiState.calendarPermission != null) {
+        if (uiState.calendarPermission != null) appStart.onContentReady()
+    }
     ObserveAsEvents(viewModel.events) { event ->
         when (event) {
             OnboardingRequestPermissionEvent.NavigateToHome -> onNavigateToHome()
@@ -49,7 +55,7 @@ fun OnboardingRequestPermissionScreen(
 }
 
 @Composable
-private fun OnboardingRequestPermissionContent(
+internal fun OnboardingRequestPermissionContent(
     uiState: OnboardingRequestPermissionUiState,
     onGrantPermissionClick: () -> Unit,
 ) {

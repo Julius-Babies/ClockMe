@@ -135,6 +135,7 @@ class AndroidCalendarRepository(
                             calendarId = it.getLong(INSTANCE_INDEX_CALENDAR_ID),
                             start = Instant.fromEpochMilliseconds(it.getLong(INSTANCE_INDEX_BEGIN)),
                             end = Instant.fromEpochMilliseconds(it.getLong(INSTANCE_INDEX_END)),
+                            title = it.getString(INSTANCE_INDEX_TITLE).orEmpty(),
                         ),
                     )
                 }
@@ -167,6 +168,7 @@ class AndroidCalendarRepository(
                     date = it.date,
                     start = it.start,
                     end = it.end,
+                    title = it.title,
                 )
             },
             dailyMinutes = dailyMinutes.map {
@@ -176,17 +178,19 @@ class AndroidCalendarRepository(
     }
 
     override fun observeEventSegments(): Flow<List<EventSegment>> =
-        calendarEventDao.observeSegments().map { segments ->
-            segments.map {
-                EventSegment(
-                    calendarId = it.calendarId,
-                    eventId = it.eventId,
-                    date = it.date,
-                    start = it.start,
-                    end = it.end,
-                )
-            }
-        }
+        calendarEventDao.observeSegments().map { segments -> segments.map { it.toModel() } }
+
+    override fun observeEventSegments(from: LocalDate, to: LocalDate): Flow<List<EventSegment>> =
+        calendarEventDao.observeSegments(from, to).map { segments -> segments.map { it.toModel() } }
+
+    private fun EventSegmentEntity.toModel() = EventSegment(
+        calendarId = calendarId,
+        eventId = eventId,
+        date = date,
+        start = start,
+        end = end,
+        title = title,
+    )
 
     override fun observeDailyMinutes(): Flow<List<DailyCalendarMinutes>> =
         calendarEventDao.observeDailyMinutes().map { minutes ->
@@ -267,11 +271,13 @@ class AndroidCalendarRepository(
             Instances.CALENDAR_ID,
             Instances.BEGIN,
             Instances.END,
+            Instances.TITLE,
         )
         const val INSTANCE_INDEX_EVENT_ID = 0
         const val INSTANCE_INDEX_CALENDAR_ID = 1
         const val INSTANCE_INDEX_BEGIN = 2
         const val INSTANCE_INDEX_END = 3
+        const val INSTANCE_INDEX_TITLE = 4
 
         val PROJECTION = arrayOf(
             Calendars._ID,

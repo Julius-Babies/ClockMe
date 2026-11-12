@@ -42,7 +42,7 @@ fun CalendarsScreen(viewModel: CalendarsViewModel = koinViewModel()) {
 }
 
 @Composable
-private fun CalendarsContent(
+internal fun CalendarsContent(
     uiState: CalendarsUiState,
     onCalendarClick: (CalendarAccount, Calendar) -> Unit,
 ) {

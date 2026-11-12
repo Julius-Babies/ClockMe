@@ -12,12 +12,24 @@
     <string name="nav_calendars">Calendars</string>
 
     <string name="home_no_active_calendars">No active calendars yet. Pick some in the Calendars tab.</string>
-    <plurals name="home_active_calendars">
-        <item quantity="one">%d active calendar</item>
-        <item quantity="other">%d active calendars</item>
-    </plurals>
 
     <string name="home_last_event_sync">Last updated %1$s</string>
+
+    <string name="home_shortcut_today">Today</string>
+    <string name="home_shortcut_yesterday">Yesterday</string>
+    <string name="home_shortcut_this_week">This week</string>
+    <string name="home_shortcut_this_month">This month</string>
+    <string name="home_shortcut_all">All time</string>
+    <string name="home_total">Total</string>
+    <string name="home_events">Events</string>
+    <string name="home_events_of_calendar">Events · %1$s</string>
+    <string name="home_no_events">No events so far.</string>
+    <string name="home_event_untitled">(No title)</string>
+    <string name="home_event_ongoing">Ongoing</string>
+
+    <string name="duration_hours" translatable="false">%1$dh</string>
+    <string name="duration_hours_minutes" translatable="false">%1$dh%2$02d</string>
+    <string name="duration_minutes" translatable="false">%1$dmin</string>
 
     <string name="calendars_title">Calendars</string>
     <string name="calendars_empty">No calendars found.</string>

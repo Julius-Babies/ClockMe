@@ -144,7 +144,7 @@ class CalendarEventSyncTest {
             assertNotNull("Event was not synced automatically", segments)
             assertEquals(
                 listOf(DailyCalendarMinutes(calendarId, yesterday, minutes = 45)),
-                calendarRepository.observeDailyMinutes().first { it.isNotEmpty() },
+                withTimeoutOrNull(TIMEOUT_MS) { calendarRepository.observeDailyMinutes().first { it.isNotEmpty() } },
             )
         }
     }

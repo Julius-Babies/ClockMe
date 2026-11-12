@@ -55,6 +55,9 @@ interface CalendarRepository {
     /** Stored event segments of all active calendars. */
     fun observeEventSegments(): Flow<List<EventSegment>>
 
+    /** Stored event segments of all active calendars on the days [from] until [to] (inclusive). */
+    fun observeEventSegments(from: LocalDate, to: LocalDate): Flow<List<EventSegment>>
+
     /** Stored minutes per calendar and day of all active calendars. */
     fun observeDailyMinutes(): Flow<List<DailyCalendarMinutes>>
 }

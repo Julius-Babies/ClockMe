@@ -9,6 +9,7 @@ data class EventInstance(
     val calendarId: Long,
     val start: Instant,
     val end: Instant,
+    val title: String = "",
 )
 
 /** The part of an [EventInstance] that falls on one [date]. Events across midnight have several. */
@@ -18,6 +19,7 @@ data class EventSegment(
     val date: LocalDate,
     val start: Instant,
     val end: Instant,
+    val title: String = "",
 )
 
 /** Minutes covered by events of a calendar on a [date]; overlapping events count once. */

@@ -21,4 +21,5 @@ data class EventSegmentEntity(
     val date: LocalDate,
     @ColumnInfo(name = "start_time") val start: Instant,
     @ColumnInfo(name = "end_time") val end: Instant,
+    val title: String,
 )

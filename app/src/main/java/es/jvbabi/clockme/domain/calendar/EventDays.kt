@@ -23,7 +23,7 @@ fun EventInstance.splitIntoDays(timeZone: TimeZone): List<EventSegment> {
         while (segmentStart < end) {
             val nextDay = date.plus(1, DateTimeUnit.DAY)
             val segmentEnd = minOf(end, nextDay.atStartOfDayIn(timeZone))
-            add(EventSegment(calendarId, eventId, date, segmentStart, segmentEnd))
+            add(EventSegment(calendarId, eventId, date, segmentStart, segmentEnd, title))
             segmentStart = segmentEnd
             date = nextDay
         }
@@ -46,8 +46,15 @@ fun List<EventSegment>.minutesPerCalendarAndDay(): List<DailyCalendarMinutes> =
         }
         .sortedWith(compareBy({ it.date }, { it.calendarId }))
 
-/** Length of the union of all segments. */
-private fun List<EventSegment>.coveredDuration(): Duration {
+/** The part of the segment between [from] and [to], `null` if it lies outside. */
+fun EventSegment.clipTo(from: Instant, to: Instant): EventSegment? {
+    val clippedStart = maxOf(start, from)
+    val clippedEnd = minOf(end, to)
+    return if (clippedStart < clippedEnd) copy(start = clippedStart, end = clippedEnd) else null
+}
+
+/** Length of the union of all segments, overlapping time counts once. */
+fun List<EventSegment>.coveredDuration(): Duration {
     var total = Duration.ZERO
     var currentStart: Instant? = null
     var currentEnd: Instant? = null

@@ -1,9 +1,9 @@
 package es.jvbabi.clockme.data.calendar.local
 
 import androidx.room3.Dao
-import androidx.room3.Insert
 import androidx.room3.Query
 import androidx.room3.Transaction
+import androidx.room3.Upsert
 import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.LocalDate
 
@@ -12,6 +12,9 @@ interface CalendarEventDao {
 
     @Query("SELECT * FROM event_segment ORDER BY start_time")
     fun observeSegments(): Flow<List<EventSegmentEntity>>
+
+    @Query("SELECT * FROM event_segment WHERE date BETWEEN :from AND :to ORDER BY start_time")
+    fun observeSegments(from: LocalDate, to: LocalDate): Flow<List<EventSegmentEntity>>
 
     @Query("SELECT * FROM daily_calendar_minutes ORDER BY date, calendar_id")
     fun observeDailyMinutes(): Flow<List<DailyCalendarMinutesEntity>>
@@ -25,10 +28,11 @@ interface CalendarEventDao {
     @Query("DELETE FROM daily_calendar_minutes WHERE calendar_id = :calendarId AND date BETWEEN :from AND :to")
     suspend fun deleteDailyMinutes(calendarId: Long, from: LocalDate, to: LocalDate)
 
-    @Insert
+    // Upsert: the provider may report an occurrence twice
+    @Upsert
     suspend fun insertSegments(segments: List<EventSegmentEntity>)
 
-    @Insert
+    @Upsert
     suspend fun insertDailyMinutes(minutes: List<DailyCalendarMinutesEntity>)
 
     /**

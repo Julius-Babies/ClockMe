@@ -26,7 +26,7 @@ import es.jvbabi.clockme.data.keyvalue.local.KeyValueEntity
         EventSegmentEntity::class,
         DailyCalendarMinutesEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 @ColumnTypeConverters(Converters::class)

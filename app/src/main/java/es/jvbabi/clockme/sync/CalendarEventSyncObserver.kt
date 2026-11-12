@@ -1,7 +1,9 @@
 package es.jvbabi.clockme.sync
 
+import android.util.Log
 import es.jvbabi.clockme.data.calendar.CalendarRepository
 import es.jvbabi.clockme.domain.calendar.SyncCalendarEventsUseCase
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -40,11 +42,23 @@ class CalendarEventSyncObserver(
                 // The provider often notifies several times for one change
                 .debounce(DEBOUNCE_MILLIS)
                 .conflate()
-                .collect { syncCalendarEvents() }
+                .collect { syncSafely() }
+        }
+    }
+
+    /** A failed sync must not end the observer (or crash the app), the next change retries. */
+    private suspend fun syncSafely() {
+        try {
+            syncCalendarEvents()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Syncing calendar events failed", e)
         }
     }
 
     private companion object {
+        const val TAG = "CalendarEventSync"
         const val DEBOUNCE_MILLIS = 500L
     }
 }

@@ -10,12 +10,21 @@
     <string name="nav_calendars">Kalender</string>
 
     <string name="home_no_active_calendars">Noch keine aktiven Kalender. Wähle welche im Tab „Kalender“ aus.</string>
-    <plurals name="home_active_calendars">
-        <item quantity="one">%d aktiver Kalender</item>
-        <item quantity="other">%d aktive Kalender</item>
-    </plurals>
 
     <string name="home_last_event_sync">Zuletzt aktualisiert %1$s</string>
+
+    <string name="home_shortcut_today">Heute</string>
+    <string name="home_shortcut_yesterday">Gestern</string>
+    <string name="home_shortcut_this_week">Diese Woche</string>
+    <string name="home_shortcut_this_month">Dieser Monat</string>
+    <string name="home_shortcut_all">Gesamt</string>
+    <string name="home_total">Gesamt</string>
+    <string name="home_events">Termine</string>
+    <string name="home_events_of_calendar">Termine · %1$s</string>
+    <string name="home_no_events">Bisher keine Termine.</string>
+    <string name="home_event_untitled">(Ohne Titel)</string>
+    <string name="home_event_ongoing">Läuft</string>
+
 
     <string name="calendars_title">Kalender</string>
     <string name="calendars_empty">Keine Kalender gefunden.</string>
