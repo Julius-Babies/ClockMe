@@ -141,25 +141,13 @@ def bezier(x1, y1, x2, y2):
     return f
 
 HANDS_END = 400                          # L blendet aus, Strich schrumpft
-CLOSE_START, CLOSE_END = 150, 800        # Segmente wachsen zum Ring
-UNWIND_END = 1200                        # Ring läuft bis auf den ersten Indicator-Frame ab
+MORPH_START, MORPH_END = 150, 950        # C dreht sich im Uhrzeigersinn und schrumpft in den Indicator-Bogen
 SPIN = 6000                              # ein voller M3-Zyklus
 HANDS_EASE = (0.3, 0.0, 1.0, 1.0)
-CLOSE_EASE = (0.2, 0.0, 0.0, 1.0)
-# endet mit der Geschwindigkeit, mit der der Spinner das Bogenende bewegt (~0.48°/ms)
-UNWIND_EASE = (0.4, 0.0, 0.6, 0.764)
+SHAPE_EASE = (0.4, 0.0, 0.2, 1.0)        # Lücken, Eckenradius und Strichstärke
 FIRST_PROGRESS, MAX_PROGRESS = 0.1, 0.87
 STANDARD = (0.2, 0.0, 0.0, 1.0)
-
-N_SAMPLES = 12
-# Segmente drehen sich beim Zusammenwachsen gegen den Uhrzeigersinn (Gruppenrotation, gleiche Easing-Kurve)
-# Über die ganze Phase verteilt und sanft, sonst wirkt die Drehung durch die fast gleich verteilten Lücken
-# wie im Uhrzeigersinn (Wagenrad-Effekt).
-CLOSE_SPIN = -90
-SPIN_EASE = (0.4, 0.0, 0.2, 1.0)
-close_times = [CLOSE_START + round((CLOSE_END - CLOSE_START) * i / N_SAMPLES) for i in range(N_SAMPLES + 1)]
-close_ease = bezier(*CLOSE_EASE)
-close_frames = [ring_segments(close_ease(i / N_SAMPLES)) for i in range(N_SAMPLES + 1)]
+N_SAMPLES = 20                           # Stützstellen der Morph-Animation
 
 def spin_rotation(t):
     """M3 1.4: globale 1080°/6 s linear + 90°-Sprünge (300 ms) alle 1500 ms."""
@@ -170,8 +158,38 @@ def spin_rotation(t):
     return 1080 * t / SPIN + extra
 
 SPIN_KEYS = [0, 300, 1500, 1800, 3000, 3300, 4500, 4800, 6000]
-UNWIND_TRIM = 1 - FIRST_PROGRESS      # Ring startet bei 36°-360°, Kopf bleibt bei 36°
-RING_START = 360 * FIRST_PROGRESS
+
+# Geschwindigkeit (°/ms) von Bogenanfang und -ende im ersten Spinner-Frame
+TAIL_SPEED = 1080 / SPIN + 90 / 300
+HEAD_SPEED = TAIL_SPEED + 360 * (MAX_PROGRESS - FIRST_PROGRESS) / (SPIN / 2)
+TAIL_END, HEAD_END = 360.0, 360.0 + 360 * FIRST_PROGRESS   # Bogen 0°..36°, eine Umdrehung weiter
+
+def hermite(u, slope):
+    """0 -> 1, startet in Ruhe und endet mit der gegebenen (normierten) Steigung."""
+    return (slope - 2) * u ** 3 + (3 - slope) * u ** 2
+
+def morph_state(u):
+    """u in [0, 1] über die Morph-Phase: Ende und Anfang des C laufen im Uhrzeigersinn,
+    der Anfang holt auf, bis nur der 36°-Bogen bleibt. Beide enden mit Spinner-Geschwindigkeit."""
+    dur = MORPH_END - MORPH_START
+    tail = START0 + (TAIL_END - START0) * hermite(u, TAIL_SPEED * dur / (TAIL_END - START0))
+    head = END0 + (HEAD_END - END0) * hermite(u, HEAD_SPEED * dur / (HEAD_END - END0))
+    c = bezier(*SHAPE_EASE)(u)
+    bounds = [tail] + [tail + (head - tail) * k for k in SPLIT] + [head]
+    return bounds, lerp(S0, SF, c), G0 * (1 - c), RC0 * (1 - c)
+
+def morph_segments(u):
+    """Je Segment (Rotation, Pfad im lokalen Rahmen um 0°), damit der Pfad-Morph klein bleibt."""
+    b, sw, g, rc = morph_state(u)
+    out = []
+    for i in range(3):
+        lo, hi = b[i], b[i + 1]
+        m = (lo + hi) / 2
+        out.append((m, segment(lo - m, hi - m, "cap" if i == 0 else "cut", "cap" if i == 2 else "cut", sw, g, rc, 1)))
+    return out
+
+morph_times = [MORPH_START + round((MORPH_END - MORPH_START) * k / N_SAMPLES) for k in range(N_SAMPLES + 1)]
+morph_frames = [morph_segments(k / N_SAMPLES) for k in range(N_SAMPLES + 1)]
 
 # ---------------------------------------------------------------- SVG
 def ks(e): return " ".join(f"{v:g}" for v in e)
@@ -187,36 +205,29 @@ def svg_static(color="#000", outline=False):
     return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">{body}</svg>'
 
 def svg_anim(color, spinner):
-    total = UNWIND_END + (SPIN if spinner else 0)
     s = lambda ms: f"{ms / 1000:g}s"
-    out = [f'<g><animateTransform attributeName="transform" type="rotate" dur="{s(CLOSE_END)}" fill="freeze" calcMode="spline" '
-           f'keyTimes="0;1" keySplines="{ks(SPIN_EASE)}" values="0 {C:g} {C:g};{CLOSE_SPIN} {C:g} {C:g}"/>']
+    kt = ";".join(f"{t / MORPH_END:.4f}" for t in [0] + morph_times)
+    out = []
     for i in range(3):
-        vals = [close_frames[0][i]] + [f[i] for f in close_frames]
-        times = [0] + close_times
-        kt = ";".join(f"{t / CLOSE_END:.4f}" for t in times)
-        out.append(f'<path d="{vals[0]}" fill="{color}">'
-                   f'<animate attributeName="d" dur="{s(CLOSE_END)}" fill="freeze" keyTimes="{kt}" values="{";".join(vals)}"/>'
-                   f'<set attributeName="opacity" to="0" begin="{s(CLOSE_END)}" fill="freeze"/></path>')
-    out.append("</g>")
+        frames = [morph_frames[0]] + morph_frames
+        rots = ";".join(f"{f[i][0]:.3f} {C:g} {C:g}" for f in frames)
+        paths = ";".join(f[i][1] for f in frames)
+        hide = f'<set attributeName="opacity" to="0" begin="{s(MORPH_END)}" fill="freeze"/>' if spinner else ""
+        out.append(f'<g transform="rotate({frames[0][i][0]:.3f} {C:g} {C:g})">'
+                   f'<animateTransform attributeName="transform" type="rotate" dur="{s(MORPH_END)}" fill="freeze" keyTimes="{kt}" values="{rots}"/>'
+                   f'<path d="{frames[0][i][1]}" fill="{color}">'
+                   f'<animate attributeName="d" dur="{s(MORPH_END)}" fill="freeze" keyTimes="{kt}" values="{paths}"/>{hide}</path></g>')
     out.append(f'<path d="{HANDS}" fill="none" stroke="{color}" stroke-width="{S0}" stroke-linecap="round" stroke-linejoin="round">'
                f'<animate attributeName="stroke-width" values="{S0};0" dur="{s(HANDS_END)}" calcMode="spline" keyTimes="0;1" keySplines="{ks(HANDS_EASE)}" fill="freeze"/>'
                f'<animate attributeName="opacity" values="1;0" dur="{s(HANDS_END)}" calcMode="spline" keyTimes="0;1" keySplines="{ks(HANDS_EASE)}" fill="freeze"/></path>')
-    un = UNWIND_END - CLOSE_END
-    out.append(f'<path d="{circle(RING_START - 360)}" pathLength="100" fill="none" stroke="{color}" stroke-width="{SF:.3f}" stroke-linecap="round" '
-               f'stroke-dasharray="100 200" opacity="0">'
-               f'<set attributeName="opacity" to="1" begin="{s(CLOSE_END)}" fill="freeze"/>'
-               f'<animate attributeName="stroke-dasharray" values="100 200;{100 * (1 - UNWIND_TRIM):g} 200" begin="{s(CLOSE_END)}" dur="{s(un)}" calcMode="spline" keyTimes="0;1" keySplines="{ks(UNWIND_EASE)}" fill="freeze"/>'
-               f'<animate attributeName="stroke-dashoffset" values="0;{-100 * UNWIND_TRIM:g}" begin="{s(CLOSE_END)}" dur="{s(un)}" calcMode="spline" keyTimes="0;1" keySplines="{ks(UNWIND_EASE)}" fill="freeze"/>'
-               + (f'<set attributeName="opacity" to="0" begin="{s(UNWIND_END)}" fill="freeze"/>' if spinner else "") + '</path>')
     if spinner:
         rot_vals = ";".join(f"{spin_rotation(t):g} {C:g} {C:g}" for t in SPIN_KEYS)
         rot_kt = ";".join(f"{t / SPIN:g}" for t in SPIN_KEYS)
-        out.append(f'<g><animateTransform attributeName="transform" type="rotate" begin="{s(UNWIND_END)}" dur="{s(SPIN)}" values="{rot_vals}" keyTimes="{rot_kt}" fill="freeze"/>'
+        out.append(f'<g><animateTransform attributeName="transform" type="rotate" begin="{s(MORPH_END)}" dur="{s(SPIN)}" values="{rot_vals}" keyTimes="{rot_kt}" fill="freeze"/>'
                    f'<path d="{circle(0)}" pathLength="100" fill="none" stroke="{color}" stroke-width="{SF:.3f}" stroke-linecap="round" '
                    f'stroke-dasharray="{100 * FIRST_PROGRESS:g} 200" opacity="0">'
-                   f'<set attributeName="opacity" to="1" begin="{s(UNWIND_END)}" fill="freeze"/>'
-                   f'<animate attributeName="stroke-dasharray" begin="{s(UNWIND_END)}" dur="{s(SPIN)}" calcMode="spline" keyTimes="0;0.5;1" '
+                   f'<set attributeName="opacity" to="1" begin="{s(MORPH_END)}" fill="freeze"/>'
+                   f'<animate attributeName="stroke-dasharray" begin="{s(MORPH_END)}" dur="{s(SPIN)}" calcMode="spline" keyTimes="0;0.5;1" '
                    f'values="{100 * FIRST_PROGRESS:g} 200;{100 * MAX_PROGRESS:g} 200;{100 * FIRST_PROGRESS:g} 200" keySplines="0 0 1 1;{ks(STANDARD)}" fill="freeze"/>'
                    f'</path></g>')
     return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">{"".join(out)}</svg>'
@@ -235,7 +246,7 @@ for name, content in files.items():
 BRAND_COLORS = [("Prod / Release", "#1B3A6B", "Icon-Hintergrund und Splash"),
                 ("Dev / Debug", "#43B600", "Icon-Hintergrund und Splash, Logo als Outline"),
                 ("Logo", "#FFFFFF", "Logo auf Markenfarbe")]
-FRAME_TIMES = [0, 150, 300, 450, 600, 800, 900, 1000, 1100, 1200, 1500, 2700, 4200, 5700, 7200]
+FRAME_TIMES = [0, 150, 300, 400, 500, 600, 700, 800, 875, 950, 1250, 2450, 3950, 5450, 6950]
 
 def brand_page():
     cc = lambda svg: svg.replace('"#000"', '"currentColor"')
@@ -251,10 +262,10 @@ def brand_page():
               ("Launcher-Skalierung", f"{ICON_SCALE}"), ("Splash-Skalierung", f"{SPLASH_SCALE}")]
     rows = "".join(f"<tr><th>{k}</th><td>{v}</td></tr>" for k, v in params)
     timeline = [(f"0–{HANDS_END} ms", "L blendet aus, Strichstärke geht auf 0"),
-                (f"0–{CLOSE_END} ms", f"Segmente drehen sich um {-CLOSE_SPIN}° gegen den Uhrzeigersinn"),
-                (f"{CLOSE_START}–{CLOSE_END} ms", "Lücken und C-Öffnung schließen sich, Segmente wachsen zum Ring zusammen"),
-                (f"{CLOSE_END}–{UNWIND_END} ms", "Ring läuft bis auf den ersten Frame des M3-Indicators ab (36°-Bogen ab 3 Uhr)"),
-                (f"{UNWIND_END}–{UNWIND_END + SPIN} ms", "ein voller Zyklus des M3 indeterminate CircularProgressIndicator")]
+                (f"{MORPH_START}–{MORPH_END} ms", "das C dreht sich im Uhrzeigersinn und schrumpft in den 36°-Bogen ab 3 Uhr, "
+                 "den ersten Frame des M3-Indicators; die Lücken schließen sich dabei, das Ende holt den Anfang ein"),
+                (f"{MORPH_END}–{MORPH_END + SPIN} ms", "ein voller Zyklus des M3 indeterminate CircularProgressIndicator, "
+                 "Anfang und Ende laufen mit derselben Geschwindigkeit weiter")]
     tl = "".join(f"<li><b>{a}</b> {b}</li>" for a, b in timeline)
     return f"""<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -412,28 +423,24 @@ def target(name, animators):
 
 targets = []
 for i in range(3):
-    a = [anim("pathData", close_frames[j][i], close_frames[j + 1][i], close_times[j], close_times[j + 1] - close_times[j], "pathType")
-         for j in range(N_SAMPLES)]
-    a.append(anim("fillAlpha", 1, 0, CLOSE_END, 0))
+    a = [anim("pathData", morph_frames[k][i][1], morph_frames[k + 1][i][1], morph_times[k], morph_times[k + 1] - morph_times[k], "pathType")
+         for k in range(N_SAMPLES)]
+    a.append(anim("fillAlpha", 1, 0, MORPH_END, 0))
     targets.append(target(f"segment{i}", a))
-targets.append(target("segments", [anim("rotation", 0, CLOSE_SPIN, 0, CLOSE_END, interp=SPIN_EASE)]))
+    targets.append(target(f"segment{i}_turn", [anim("rotation", round(morph_frames[k][i][0], 3), round(morph_frames[k + 1][i][0], 3),
+                                                    morph_times[k], morph_times[k + 1] - morph_times[k]) for k in range(N_SAMPLES)]))
 targets.append(target("hands", [anim("strokeWidth", S0, 0, 0, HANDS_END, interp=HANDS_EASE),
                                 anim("strokeAlpha", 1, 0, 0, HANDS_END, interp=HANDS_EASE)]))
-targets.append(target("ring", [anim("strokeAlpha", 0, 1, CLOSE_END, 0),
-                               anim("trimPathStart", 0, round(UNWIND_TRIM, 4), CLOSE_END, UNWIND_END - CLOSE_END, interp=UNWIND_EASE),
-                               anim("strokeAlpha", 1, 0, UNWIND_END, 0)]))
-targets.append(target("arc", [anim("strokeAlpha", 0, 1, UNWIND_END, 0),
-                              anim("trimPathEnd", FIRST_PROGRESS, MAX_PROGRESS, UNWIND_END, SPIN // 2),
-                              anim("trimPathEnd", MAX_PROGRESS, FIRST_PROGRESS, UNWIND_END + SPIN // 2, SPIN // 2, interp=STANDARD)]))
+targets.append(target("arc", [anim("strokeAlpha", 0, 1, MORPH_END, 0),
+                              anim("trimPathEnd", FIRST_PROGRESS, MAX_PROGRESS, MORPH_END, SPIN // 2),
+                              anim("trimPathEnd", MAX_PROGRESS, FIRST_PROGRESS, MORPH_END + SPIN // 2, SPIN // 2, interp=STANDARD)]))
 targets.append(target("spinner", [anim("rotation", round(spin_rotation(SPIN_KEYS[j]), 3), round(spin_rotation(SPIN_KEYS[j + 1]), 3),
-                                       UNWIND_END + SPIN_KEYS[j], SPIN_KEYS[j + 1] - SPIN_KEYS[j]) for j in range(len(SPIN_KEYS) - 1)]))
+                                       MORPH_END + SPIN_KEYS[j], SPIN_KEYS[j + 1] - SPIN_KEYS[j]) for j in range(len(SPIN_KEYS) - 1)]))
 
-segs0 = ring_segments(0)
 splash = f"""{GEN}<!--
-  Splash icon (API 31+): the logo's L fades out, the ring segments turn counterclockwise while they
-  grow together and then unwind into the first frame of
-  the Material 3 indeterminate CircularProgressIndicator (36° arc at 3 o'clock, stroke = diameter / 10),
-  then one full 6 s indicator cycle follows.
+  Splash icon (API 31+): the logo's L fades out while the ring segments turn clockwise and shrink into
+  the first frame of the Material 3 indeterminate CircularProgressIndicator (36° arc at 3 o'clock,
+  stroke = diameter / 10), arriving at the indicator's own speed; one full 6 s indicator cycle follows.
 -->
 <animated-vector {NS}
     xmlns:aapt="http://schemas.android.com/aapt">
@@ -444,11 +451,10 @@ splash = f"""{GEN}<!--
             android:viewportWidth="108"
             android:viewportHeight="108">
             <group android:pivotX="54" android:pivotY="54" android:scaleX="{SPLASH_SCALE}" android:scaleY="{SPLASH_SCALE}">
-                <group android:name="segments" android:pivotX="54" android:pivotY="54">
-{chr(10).join(f'                    <path android:name="segment{i}" android:pathData="{d}" android:fillColor="#FFFFFFFF" />' for i, d in enumerate(segs0))}
-                </group>
+{chr(10).join(f'''                <group android:name="segment{i}_turn" android:pivotX="54" android:pivotY="54" android:rotation="{morph_frames[0][i][0]:.3f}">
+                    <path android:name="segment{i}" android:pathData="{morph_frames[0][i][1]}" android:fillColor="#FFFFFFFF" />
+                </group>''' for i in range(3))}
                 <path android:name="hands" android:pathData="{HANDS}" android:strokeColor="#FFFFFFFF" android:strokeWidth="{S0}" android:strokeLineCap="round" android:strokeLineJoin="round" />
-                <path android:name="ring" android:pathData="{circle(RING_START - 360)}" android:strokeColor="#FFFFFFFF" android:strokeWidth="{SF:.3f}" android:strokeLineCap="round" android:strokeAlpha="0" />
                 <group android:name="spinner" android:pivotX="54" android:pivotY="54">
                     <path android:name="arc" android:pathData="{circle(0)}" android:strokeColor="#FFFFFFFF" android:strokeWidth="{SF:.3f}" android:strokeLineCap="round" android:strokeAlpha="0" android:trimPathEnd="{FIRST_PROGRESS}" />
                 </group>
@@ -458,7 +464,7 @@ splash = f"""{GEN}<!--
 {chr(10).join(targets)}
 </animated-vector>"""
 write("main/res/drawable/splash_animated.xml", splash)
-print("total splash ms", UNWIND_END + SPIN)
+print("total splash ms", MORPH_END + SPIN)
 
 open(os.path.join(SVG_OUT, "index.html"), "w").write(brand_page())
 
