@@ -12,4 +12,7 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Home : Screen
+
+    @Serializable
+    data object OnboardingRequestPermission : Screen
 }

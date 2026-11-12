@@ -8,6 +8,7 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import es.jvbabi.clockme.feature.home.ui.HomeScreen
+import es.jvbabi.clockme.feature.onboarding.ui.OnboardingRequestPermissionScreen
 
 @Composable
 fun AppNavigation(modifier: Modifier = Modifier) {
@@ -23,7 +24,16 @@ fun AppNavigation(modifier: Modifier = Modifier) {
             rememberViewModelStoreNavEntryDecorator(),
         ),
         entryProvider = entryProvider {
-            entry<Screen.Home> { HomeScreen() }
+            entry<Screen.Home> {
+                HomeScreen(
+                    onNavigateToOnboarding = { backStack.replaceAll(Screen.OnboardingRequestPermission) },
+                )
+            }
+            entry<Screen.OnboardingRequestPermission> {
+                OnboardingRequestPermissionScreen(
+                    onNavigateToHome = { backStack.replaceAll(Screen.Home) },
+                )
+            }
         },
     )
 }
