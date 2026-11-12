@@ -1,12 +1,10 @@
 package es.jvbabi.clockme.data.calendar
 
-import android.os.ParcelFileDescriptor
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import es.jvbabi.clockme.MainActivity
-import es.jvbabi.clockme.data.permission.AppPermission
+import es.jvbabi.clockme.testing.CalendarProviderFixture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,9 +33,7 @@ import org.koin.core.context.GlobalContext
 @RunWith(AndroidJUnit4::class)
 class AndroidCalendarRepositoryTest {
 
-    private val instrumentation = InstrumentationRegistry.getInstrumentation()
-    private val context = instrumentation.targetContext
-
+    private val fixture = CalendarProviderFixture()
     private val repository: CalendarRepository by lazy { GlobalContext.get().get() }
 
     private lateinit var scenario: ActivityScenario<MainActivity>
@@ -212,62 +208,20 @@ class AndroidCalendarRepositoryTest {
         assertEquals(expected, count())
     }
 
-    private fun grantPermission() {
-        instrumentation.uiAutomation.grantRuntimePermission(
-            context.packageName,
-            AppPermission.READ_CALENDAR.manifestName,
-        )
-    }
+    private fun grantPermission() = fixture.grantPermission()
 
-    /** Inserts a calendar as sync adapter via the shell and returns its id. */
-    private fun insertCalendar(account: String, name: String, color: Int): Long {
-        shell(
-            "content", "insert", "--uri", syncAdapterUri(account),
-            "--bind", "account_name:s:$account", "--bind", "account_type:s:$ACCOUNT_TYPE",
-            "--bind", "name:s:$name", "--bind", "calendar_displayName:s:$name",
-            "--bind", "calendar_color:i:$color", "--bind", "calendar_access_level:i:700",
-            "--bind", "ownerAccount:s:$account", "--bind", "visible:i:1", "--bind", "sync_events:i:1",
-        )
-        val output = shell(
-            "content", "query", "--uri", CALENDARS_URI,
-            "--projection", "_id:account_name:name",
-        )
-        return Regex("_id=(\\d+), account_name=$account, name=$name$", RegexOption.MULTILINE)
-            .find(output)
-            ?.groupValues?.get(1)?.toLong()
-            ?: error("Calendar $name of $account not found after insert:\n$output")
-    }
+    private fun insertCalendar(account: String, name: String, color: Int) = fixture.insertCalendar(account, name, color)
 
-    private fun deleteCalendar(account: String, id: Long) {
-        shell("content", "delete", "--uri", syncAdapterUri(account), "--where", "_id=$id")
-    }
+    private fun deleteCalendar(account: String, id: Long) = fixture.deleteCalendar(account, id)
 
-    private fun deleteTestCalendars() {
-        TEST_ACCOUNTS.forEach { account ->
-            shell("content", "delete", "--uri", syncAdapterUri(account), "--where", "account_name='$account'")
-        }
-    }
-
-    private fun syncAdapterUri(account: String) =
-        "$CALENDARS_URI?caller_is_syncadapter=true&account_name=$account&account_type=$ACCOUNT_TYPE"
-
-    /**
-     * Runs a shell command. There is no real shell involved: the command is split at spaces
-     * and no quoting is applied, so no argument may contain a space.
-     */
-    private fun shell(vararg args: String): String {
-        require(args.none { ' ' in it }) { "Shell arguments must not contain spaces: ${args.toList()}" }
-        val fd = instrumentation.uiAutomation.executeShellCommand(args.joinToString(" "))
-        return ParcelFileDescriptor.AutoCloseInputStream(fd).bufferedReader().use { it.readText() }
-    }
+    private fun deleteTestCalendars() = fixture.deleteAll()
 
     private companion object {
         const val TIMEOUT_MS = 5_000L
-        const val CALENDARS_URI = "content://com.android.calendar/calendars"
-        const val ACCOUNT_TYPE = "LOCAL"
-        const val ACCOUNT_A = "clockme-test-a"
-        const val ACCOUNT_B = "clockme-test-b"
-        val TEST_ACCOUNTS = listOf(ACCOUNT_A, ACCOUNT_B)
+        const val ACCOUNT_TYPE = CalendarProviderFixture.ACCOUNT_TYPE
+        const val ACCOUNT_A = CalendarProviderFixture.ACCOUNT_A
+        const val ACCOUNT_B = CalendarProviderFixture.ACCOUNT_B
+        val TEST_ACCOUNTS = CalendarProviderFixture.TEST_ACCOUNTS
 
         const val RED = 0xFFFF0000.toInt()
         const val GREEN = 0xFF00FF00.toInt()

@@ -1,6 +1,7 @@
 package es.jvbabi.clockme
 
 import android.content.Context
+import androidx.work.WorkerParameters
 import es.jvbabi.clockme.di.appModule
 import org.junit.Test
 import org.koin.core.annotation.KoinExperimentalAPI
@@ -11,6 +12,6 @@ import org.koin.test.verify.verify
 class KoinModuleTest : KoinTest {
     @Test
     fun verifyKoinModules() {
-        appModule.verify(extraTypes = listOf(Context::class))
+        appModule.verify(extraTypes = listOf(Context::class, WorkerParameters::class))
     }
 }

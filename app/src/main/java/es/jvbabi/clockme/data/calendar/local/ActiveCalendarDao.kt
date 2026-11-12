@@ -28,6 +28,16 @@ interface ActiveCalendarDao {
     @Query("DELETE FROM calendar_account WHERE id NOT IN (SELECT DISTINCT account_id FROM active_calendar)")
     suspend fun deleteEmptyAccounts()
 
+    /** Event data is only kept for active calendars. */
+    @Query("DELETE FROM event_segment WHERE calendar_id NOT IN (SELECT id FROM active_calendar)")
+    suspend fun deleteSegmentsOfInactiveCalendars()
+
+    @Query("DELETE FROM daily_calendar_minutes WHERE calendar_id NOT IN (SELECT id FROM active_calendar)")
+    suspend fun deleteDailyMinutesOfInactiveCalendars()
+
+    @Query("SELECT id FROM active_calendar")
+    suspend fun getCalendarIds(): List<Long>
+
     /** Stores [calendar] together with its [account]. */
     @Transaction
     suspend fun activate(account: CalendarAccountEntity, calendar: ActiveCalendarEntity) {
@@ -35,11 +45,12 @@ interface ActiveCalendarDao {
         upsertCalendar(calendar)
     }
 
-    /** Removes the calendar and its account if it has no active calendars left. */
+    /** Removes the calendar with its event data, and its account if it has no active calendars left. */
     @Transaction
     suspend fun deactivate(calendarId: Long) {
         deleteCalendar(calendarId)
         deleteEmptyAccounts()
+        deleteEventDataOfInactiveCalendars()
     }
 
     /**
@@ -61,5 +72,11 @@ interface ActiveCalendarDao {
             }
         }
         deleteEmptyAccounts()
+        deleteEventDataOfInactiveCalendars()
+    }
+
+    private suspend fun deleteEventDataOfInactiveCalendars() {
+        deleteSegmentsOfInactiveCalendars()
+        deleteDailyMinutesOfInactiveCalendars()
     }
 }

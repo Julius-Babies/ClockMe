@@ -3,6 +3,9 @@ package es.jvbabi.clockme.feature.home.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import es.jvbabi.clockme.data.calendar.CalendarRepository
+import es.jvbabi.clockme.data.keyvalue.KeyValueKey
+import es.jvbabi.clockme.data.keyvalue.KeyValueRepository
+import es.jvbabi.clockme.data.keyvalue.observeInstant
 import es.jvbabi.clockme.data.permission.AppPermission
 import es.jvbabi.clockme.data.permission.PermissionRepository
 import es.jvbabi.clockme.data.permission.PermissionStatus
@@ -11,7 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -23,12 +26,18 @@ import kotlinx.coroutines.launch
 class HomeViewModel(
     permissionRepository: PermissionRepository,
     private val calendarRepository: CalendarRepository,
+    keyValueRepository: KeyValueRepository,
 ) : ViewModel() {
 
-    val uiState: StateFlow<HomeUiState> = calendarRepository
-        .observeActiveCalendars()
-        .map { accounts -> HomeUiState(activeCalendarCount = accounts.sumOf { it.calendars.size }) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
+    val uiState: StateFlow<HomeUiState> = combine(
+        calendarRepository.observeActiveCalendars(),
+        keyValueRepository.observeInstant(KeyValueKey.LAST_EVENT_SYNC),
+    ) { accounts, lastEventSync ->
+        HomeUiState(
+            activeCalendarCount = accounts.sumOf { it.calendars.size },
+            lastEventSync = lastEventSync,
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
     private val _events = Channel<HomeEvent>(Channel.BUFFERED)
     val events: Flow<HomeEvent> = _events.receiveAsFlow()

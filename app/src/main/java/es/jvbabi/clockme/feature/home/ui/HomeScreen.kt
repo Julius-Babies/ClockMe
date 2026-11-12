@@ -1,5 +1,6 @@
 package es.jvbabi.clockme.feature.home.ui
 
+import android.text.format.DateUtils
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -56,6 +57,16 @@ private fun HomeContent(uiState: HomeUiState) {
                 null -> CircularProgressIndicator()
                 0 -> Text(stringResource(R.string.home_no_active_calendars))
                 else -> Text(pluralStringResource(R.plurals.home_active_calendars, count, count))
+            }
+            uiState.lastEventSync?.let { lastSync ->
+                Text(
+                    text = stringResource(
+                        R.string.home_last_event_sync,
+                        DateUtils.getRelativeTimeSpanString(lastSync.toEpochMilliseconds()),
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

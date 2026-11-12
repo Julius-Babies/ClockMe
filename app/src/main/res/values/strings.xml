@@ -17,6 +17,8 @@
         <item quantity="other">%d active calendars</item>
     </plurals>
 
+    <string name="home_last_event_sync">Last updated %1$s</string>
+
     <string name="calendars_title">Calendars</string>
     <string name="calendars_empty">No calendars found.</string>
 </resources>

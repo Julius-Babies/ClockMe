@@ -17,6 +17,7 @@ kotlinxSerialization = "1.13.0"
 kotlinxCoroutines = "1.11.0"
 kotlinxDatetime = "0.8.0"
 room = "3.0.3"
+work = "2.12.0"
 ksp = "2.3.13"
 phosphor = "1.0.5"
 desugarJdkLibs = "2.1.5"
@@ -51,6 +52,9 @@ androidx-room-runtime = { group = "androidx.room3", name = "room3-runtime", vers
 androidx-room-compiler = { group = "androidx.room3", name = "room3-compiler", version.ref = "room" }
 phosphor-icons = { group = "io.github.dev778g-me", name = "phosphoricon-compose", version.ref = "phosphor" }
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
+androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
+androidx-work-testing = { group = "androidx.work", name = "work-testing", version.ref = "work" }
+koin-androidx-workmanager = { group = "io.insert-koin", name = "koin-androidx-workmanager" }
 koin-bom = { group = "io.insert-koin", name = "koin-bom", version.ref = "koinBom" }
 koin-android = { group = "io.insert-koin", name = "koin-android" }
 koin-androidx-compose = { group = "io.insert-koin", name = "koin-androidx-compose" }
