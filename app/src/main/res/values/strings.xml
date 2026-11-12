@@ -2,12 +2,21 @@
     <string name="app_name" translatable="false">ClockMe</string>
 
     <string name="onboarding_calendar_permission_title">Calendar access</string>
-
-    <string name="home_calendars_title">Calendars</string>
-    <string name="home_no_calendars">No calendars found.</string>
     <string name="permission_action_request">Grant permission</string>
     <string name="permission_action_open_settings">Open app settings</string>
 
     <string name="onboarding_calendar_permission_description">%1$s needs read access to your calendar to analyze your events.</string>
     <string name="onboarding_calendar_permission_settings_hint">Tap “Permissions”, then “Calendar”, and select “Allow”.</string>
+
+    <string name="nav_home">Home</string>
+    <string name="nav_calendars">Calendars</string>
+
+    <string name="home_no_active_calendars">No active calendars yet. Pick some in the Calendars tab.</string>
+    <plurals name="home_active_calendars">
+        <item quantity="one">%d active calendar</item>
+        <item quantity="other">%d active calendars</item>
+    </plurals>
+
+    <string name="calendars_title">Calendars</string>
+    <string name="calendars_empty">No calendars found.</string>
 </resources>

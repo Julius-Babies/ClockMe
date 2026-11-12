@@ -53,40 +53,17 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun exposesCalendarAccounts() = runTest {
-        val account = CalendarAccount(
-            id = "LOCAL/Device",
-            name = "Device",
-            calendars = listOf(Calendar(id = 1, name = "Personal", color = 0xFF0000FF.toInt())),
-        )
-        val calendarRepository = FakeCalendarRepository(listOf(account))
-        val viewModel = HomeViewModel(
-            FakePermissionRepository(PermissionStatus.Granted),
-            calendarRepository,
-        )
-        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
-
-        assertEquals(listOf(account), viewModel.uiState.value.accounts)
-
-        calendarRepository.accounts.value = emptyList()
-        assertEquals(emptyList<CalendarAccount>(), viewModel.uiState.value.accounts)
-    }
-
-    @Test
-    fun clickingCalendarTogglesIt() = runTest {
-        val calendar = Calendar(id = 1, name = "Personal", color = 0xFF0000FF.toInt())
-        val account = CalendarAccount(id = "LOCAL/Device", name = "Device", calendars = listOf(calendar))
-        val calendarRepository = FakeCalendarRepository(listOf(account))
+    fun exposesActiveCalendarCount() = runTest {
+        val calendarRepository = FakeCalendarRepository()
         val viewModel = HomeViewModel(FakePermissionRepository(PermissionStatus.Granted), calendarRepository)
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
+        assertEquals(0, viewModel.uiState.value.activeCalendarCount)
 
-        viewModel.onCalendarClick(account, calendar)
-        assertEquals(setOf(1L), viewModel.uiState.value.activeCalendarIds)
-        assertEquals(listOf(account), calendarRepository.activeCalendars.value)
+        val account = CalendarAccount(id = "LOCAL/Device", name = "Device", calendars = emptyList())
+        calendarRepository.setCalendarActive(account, Calendar(id = 1, name = "Work", color = 0), active = true)
+        calendarRepository.setCalendarActive(account, Calendar(id = 2, name = "Personal", color = 0), active = true)
 
-        viewModel.onCalendarClick(account, calendar)
-        assertEquals(emptySet<Long>(), viewModel.uiState.value.activeCalendarIds)
-        assertEquals(emptyList<CalendarAccount>(), calendarRepository.activeCalendars.value)
+        assertEquals(2, viewModel.uiState.value.activeCalendarCount)
     }
 
     @Test

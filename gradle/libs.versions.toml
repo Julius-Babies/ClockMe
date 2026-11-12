@@ -17,6 +17,7 @@ kotlinxSerialization = "1.13.0"
 kotlinxCoroutines = "1.11.0"
 room = "3.0.3"
 ksp = "2.3.13"
+phosphor = "1.0.5"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -45,6 +46,7 @@ androidx-test-uiautomator = { group = "androidx.test.uiautomator", name = "uiaut
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
 androidx-room-runtime = { group = "androidx.room3", name = "room3-runtime", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room3", name = "room3-compiler", version.ref = "room" }
+phosphor-icons = { group = "io.github.dev778g-me", name = "phosphoricon-compose", version.ref = "phosphor" }
 koin-bom = { group = "io.insert-koin", name = "koin-bom", version.ref = "koinBom" }
 koin-android = { group = "io.insert-koin", name = "koin-android" }
 koin-androidx-compose = { group = "io.insert-koin", name = "koin-androidx-compose" }
