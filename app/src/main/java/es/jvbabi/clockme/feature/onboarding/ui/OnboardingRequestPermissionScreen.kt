@@ -63,7 +63,7 @@ private fun OnboardingRequestPermissionContent(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = stringResource(R.string.home_calendar_permission_title),
+                text = stringResource(R.string.onboarding_calendar_permission_title),
                 style = MaterialTheme.typography.headlineSmall,
             )
             Text(

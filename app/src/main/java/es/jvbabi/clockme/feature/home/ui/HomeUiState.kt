@@ -1,8 +1,8 @@
 package es.jvbabi.clockme.feature.home.ui
 
-import es.jvbabi.clockme.data.permission.PermissionStatus
+import es.jvbabi.clockme.data.calendar.CalendarAccount
 
 data class HomeUiState(
-    /** `null` while the status is being loaded. */
-    val calendarPermission: PermissionStatus? = null,
+    /** `null` while loading. */
+    val accounts: List<CalendarAccount>? = null,
 )

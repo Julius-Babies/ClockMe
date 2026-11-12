@@ -2,6 +2,7 @@ package es.jvbabi.clockme.feature.home.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import es.jvbabi.clockme.data.calendar.CalendarRepository
 import es.jvbabi.clockme.data.permission.AppPermission
 import es.jvbabi.clockme.data.permission.PermissionRepository
 import es.jvbabi.clockme.data.permission.PermissionStatus
@@ -17,12 +18,12 @@ import kotlinx.coroutines.launch
 
 class HomeViewModel(
     permissionRepository: PermissionRepository,
+    calendarRepository: CalendarRepository,
 ) : ViewModel() {
 
-    private val calendarPermission = permissionRepository.observe(AppPermission.READ_CALENDAR)
-
-    val uiState: StateFlow<HomeUiState> = calendarPermission
-        .map { HomeUiState(calendarPermission = it) }
+    val uiState: StateFlow<HomeUiState> = calendarRepository
+        .observeAccounts()
+        .map { HomeUiState(accounts = it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
     private val _events = Channel<HomeEvent>(Channel.BUFFERED)
@@ -30,7 +31,8 @@ class HomeViewModel(
 
     init {
         viewModelScope.launch {
-            calendarPermission.first { it != PermissionStatus.Granted }
+            permissionRepository.observe(AppPermission.READ_CALENDAR)
+                .first { it != PermissionStatus.Granted }
             _events.send(HomeEvent.NavigateToOnboarding)
         }
     }

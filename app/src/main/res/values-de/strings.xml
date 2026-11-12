@@ -1,7 +1,8 @@
 <resources>
-    <string name="home_calendar_permission_title">Kalenderzugriff</string>
+    <string name="onboarding_calendar_permission_title">Kalenderzugriff</string>
 
-    <string name="permission_status_granted">Berechtigung erteilt.</string>
+    <string name="home_calendars_title">Kalender</string>
+    <string name="home_no_calendars">Keine Kalender gefunden.</string>
     <string name="permission_action_request">Berechtigung erteilen</string>
     <string name="permission_action_open_settings">App-Einstellungen öffnen</string>
 

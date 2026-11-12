@@ -1,9 +1,10 @@
 <resources>
     <string name="app_name" translatable="false">ClockMe</string>
 
-    <string name="home_calendar_permission_title">Calendar access</string>
+    <string name="onboarding_calendar_permission_title">Calendar access</string>
 
-    <string name="permission_status_granted">Permission granted.</string>
+    <string name="home_calendars_title">Calendars</string>
+    <string name="home_no_calendars">No calendars found.</string>
     <string name="permission_action_request">Grant permission</string>
     <string name="permission_action_open_settings">Open app settings</string>
 
