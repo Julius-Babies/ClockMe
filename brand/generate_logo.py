@@ -141,7 +141,8 @@ def bezier(x1, y1, x2, y2):
     return f
 
 HANDS_END = 400                          # L blendet aus, Strich schrumpft
-MORPH_START, MORPH_END = 150, 950        # C dreht sich im Uhrzeigersinn und schrumpft in den Indicator-Bogen
+MORPH_START, MORPH_END = 0, 800          # C dreht sich im Uhrzeigersinn und schrumpft in den Indicator-Bogen,
+                                         # gleichzeitig mit dem Ausblenden des L
 SPIN = 6000                              # ein voller M3-Zyklus
 HANDS_EASE = (0.3, 0.0, 1.0, 1.0)
 SHAPE_EASE = (0.4, 0.0, 0.2, 1.0)        # Lücken, Eckenradius und Strichstärke
@@ -206,10 +207,11 @@ def svg_static(color="#000", outline=False):
 
 def svg_anim(color, spinner):
     s = lambda ms: f"{ms / 1000:g}s"
-    kt = ";".join(f"{t / MORPH_END:.4f}" for t in [0] + morph_times)
+    hold = [0] if MORPH_START > 0 else []        # Logo bis zum Morph-Start stehen lassen
+    kt = ";".join(f"{t / MORPH_END:.4f}" for t in hold + morph_times)
     out = []
     for i in range(3):
-        frames = [morph_frames[0]] + morph_frames
+        frames = [morph_frames[0]] * len(hold) + morph_frames
         rots = ";".join(f"{f[i][0]:.3f} {C:g} {C:g}" for f in frames)
         paths = ";".join(f[i][1] for f in frames)
         hide = f'<set attributeName="opacity" to="0" begin="{s(MORPH_END)}" fill="freeze"/>' if spinner else ""
@@ -246,7 +248,7 @@ for name, content in files.items():
 BRAND_COLORS = [("Prod / Release", "#1B3A6B", "Icon-Hintergrund und Splash"),
                 ("Dev / Debug", "#43B600", "Icon-Hintergrund und Splash, Logo als Outline"),
                 ("Logo", "#FFFFFF", "Logo auf Markenfarbe")]
-FRAME_TIMES = [0, 150, 300, 400, 500, 600, 700, 800, 875, 950, 1250, 2450, 3950, 5450, 6950]
+FRAME_TIMES = [0, 100, 200, 300, 400, 500, 600, 700, 800, 1100, 2300, 3800, 5300, 6800]
 
 def brand_page():
     cc = lambda svg: svg.replace('"#000"', '"currentColor"')
