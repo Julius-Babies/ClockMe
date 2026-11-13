@@ -28,4 +28,19 @@
 
     <string name="calendars_title">Kalender</string>
     <string name="calendars_empty">Keine Kalender gefunden.</string>
+
+    <string name="groups_title">Gruppen</string>
+    <string name="groups_create">Neue Gruppe</string>
+    <string name="groups_empty">Fasse Kalender zu Gruppen zusammen.</string>
+    <string name="groups_no_calendars">Noch keine Kalender</string>
+    <string name="groups_new">Neue Gruppe</string>
+    <string name="groups_edit">Gruppe bearbeiten</string>
+    <string name="groups_name">Name</string>
+    <string name="groups_color">Farbe</string>
+    <string name="groups_no_color">Keine Farbe</string>
+    <string name="groups_calendars">Kalender</string>
+    <string name="groups_delete">Löschen</string>
+    <string name="groups_save">Speichern</string>
+    <string name="groups_no_active_calendars">Aktiviere oben Kalender, um sie einer Gruppe hinzuzufügen.</string>
+    <string name="groups_calendar_in_other_group">In %1$s, wird verschoben</string>
 </resources>

@@ -4,6 +4,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import es.jvbabi.clockme.MainActivity
+import es.jvbabi.clockme.data.group.CalendarGroupRepository
 import es.jvbabi.clockme.testing.CalendarProviderFixture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -186,6 +187,20 @@ class AndroidCalendarRepositoryTest {
             listOf(account.copy(calendars = listOf(Calendar(id = workId, name = "Work", color = RED)))),
             testAccounts(repository.observeActiveCalendars().first()),
         )
+    }
+
+    @Test
+    fun syncRemovesDeletedCalendarsFromGroups() = runBlocking {
+        grantPermission()
+        val workId = insertCalendar(ACCOUNT_A, "Work", RED)
+        val personalId = insertCalendar(ACCOUNT_A, "Personal", BLUE)
+        val groups: CalendarGroupRepository = GlobalContext.get().get()
+        val groupId = groups.createGroup("Group", null, setOf(workId, personalId))
+
+        deleteCalendar(ACCOUNT_A, personalId)
+        repository.syncActiveCalendars()
+
+        assertEquals(setOf(workId), groups.observeGroups().first().single { it.id == groupId }.calendarIds)
     }
 
     @Test

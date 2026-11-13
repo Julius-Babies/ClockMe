@@ -19,6 +19,7 @@ import es.jvbabi.clockme.data.calendar.local.CalendarAccountEntity
 import es.jvbabi.clockme.data.calendar.local.CalendarEventDao
 import es.jvbabi.clockme.data.calendar.local.DailyCalendarMinutesEntity
 import es.jvbabi.clockme.data.calendar.local.EventSegmentEntity
+import es.jvbabi.clockme.data.group.local.CalendarGroupDao
 import es.jvbabi.clockme.data.permission.AppPermission
 import es.jvbabi.clockme.data.permission.PermissionRepository
 import es.jvbabi.clockme.data.permission.PermissionStatus
@@ -44,6 +45,7 @@ class AndroidCalendarRepository(
     private val permissionRepository: PermissionRepository,
     private val activeCalendarDao: ActiveCalendarDao,
     private val calendarEventDao: CalendarEventDao,
+    private val calendarGroupDao: CalendarGroupDao,
 ) : CalendarRepository {
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -98,6 +100,7 @@ class AndroidCalendarRepository(
             }
         }.toMap()
         activeCalendarDao.sync(existing)
+        calendarGroupDao.removeMembersNotIn(existing.keys.toList())
     }
 
     override suspend fun getActiveCalendarIds(): List<Long> = activeCalendarDao.getCalendarIds()

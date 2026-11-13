@@ -11,6 +11,9 @@ import es.jvbabi.clockme.data.calendar.local.EventSegmentEntity
 import es.jvbabi.clockme.data.calendar.local.ActiveCalendarDao
 import es.jvbabi.clockme.data.calendar.local.ActiveCalendarEntity
 import es.jvbabi.clockme.data.calendar.local.CalendarAccountEntity
+import es.jvbabi.clockme.data.group.local.CalendarGroupDao
+import es.jvbabi.clockme.data.group.local.CalendarGroupEntity
+import es.jvbabi.clockme.data.group.local.CalendarGroupMemberEntity
 import es.jvbabi.clockme.data.keyvalue.local.KeyValueDao
 import es.jvbabi.clockme.data.keyvalue.local.KeyValueEntity
 
@@ -25,8 +28,10 @@ import es.jvbabi.clockme.data.keyvalue.local.KeyValueEntity
         KeyValueEntity::class,
         EventSegmentEntity::class,
         DailyCalendarMinutesEntity::class,
+        CalendarGroupEntity::class,
+        CalendarGroupMemberEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 @ColumnTypeConverters(Converters::class)
@@ -37,6 +42,8 @@ abstract class ClockMeDatabase : RoomDatabase() {
     abstract fun keyValueDao(): KeyValueDao
 
     abstract fun calendarEventDao(): CalendarEventDao
+
+    abstract fun calendarGroupDao(): CalendarGroupDao
 
     companion object {
         private const val NAME = "clockme.db"

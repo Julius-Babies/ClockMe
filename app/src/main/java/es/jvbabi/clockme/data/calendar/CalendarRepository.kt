@@ -20,7 +20,8 @@ interface CalendarRepository {
 
     /**
      * Removes active calendars that no longer exist on the device (and accounts left without
-     * calendars), and updates name and color of the others. Does nothing without permission.
+     * calendars), and updates name and color of the others. Calendars that no longer exist are
+     * also removed from all groups. Does nothing without permission.
      */
     suspend fun syncActiveCalendars()
 

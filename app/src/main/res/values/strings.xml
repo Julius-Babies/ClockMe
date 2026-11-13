@@ -33,4 +33,19 @@
 
     <string name="calendars_title">Calendars</string>
     <string name="calendars_empty">No calendars found.</string>
+
+    <string name="groups_title">Groups</string>
+    <string name="groups_create">New group</string>
+    <string name="groups_empty">Combine calendars into groups.</string>
+    <string name="groups_no_calendars">No calendars yet</string>
+    <string name="groups_new">New group</string>
+    <string name="groups_edit">Edit group</string>
+    <string name="groups_name">Name</string>
+    <string name="groups_color">Color</string>
+    <string name="groups_no_color">No color</string>
+    <string name="groups_calendars">Calendars</string>
+    <string name="groups_delete">Delete</string>
+    <string name="groups_save">Save</string>
+    <string name="groups_no_active_calendars">Activate calendars above to add them to a group.</string>
+    <string name="groups_calendar_in_other_group">In %1$s, would be moved</string>
 </resources>
