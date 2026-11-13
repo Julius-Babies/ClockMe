@@ -4,6 +4,7 @@ import es.jvbabi.clockme.data.calendar.Calendar
 import es.jvbabi.clockme.data.calendar.CalendarAccount
 import es.jvbabi.clockme.data.calendar.EventSegment
 import es.jvbabi.clockme.data.permission.PermissionStatus
+import es.jvbabi.clockme.testing.FakeCalendarGroupRepository
 import es.jvbabi.clockme.testing.FakeCalendarRepository
 import es.jvbabi.clockme.testing.FakeKeyValueRepository
 import es.jvbabi.clockme.testing.FakePermissionRepository
@@ -45,21 +46,21 @@ class HomeViewModelTest {
 
     @Test
     fun navigatesToOnboardingWhenPermissionIsMissing() = runTest {
-        val viewModel = HomeViewModel(FakePermissionRepository(PermissionStatus.NotRequested), FakeCalendarRepository(), FakeKeyValueRepository(), FakeTimeProvider(now))
+        val viewModel = HomeViewModel(FakePermissionRepository(PermissionStatus.NotRequested), FakeCalendarRepository(), FakeKeyValueRepository(), FakeTimeProvider(now), FakeCalendarGroupRepository())
 
         assertEquals(HomeEvent.NavigateToOnboarding, viewModel.events.first())
     }
 
     @Test
     fun navigatesToOnboardingWhenPermissionIsPermanentlyDenied() = runTest {
-        val viewModel = HomeViewModel(FakePermissionRepository(PermissionStatus.PermanentlyDenied), FakeCalendarRepository(), FakeKeyValueRepository(), FakeTimeProvider(now))
+        val viewModel = HomeViewModel(FakePermissionRepository(PermissionStatus.PermanentlyDenied), FakeCalendarRepository(), FakeKeyValueRepository(), FakeTimeProvider(now), FakeCalendarGroupRepository())
 
         assertEquals(HomeEvent.NavigateToOnboarding, viewModel.events.first())
     }
 
     @Test
     fun staysOnHomeWhenPermissionIsGranted() = runTest {
-        val viewModel = HomeViewModel(FakePermissionRepository(PermissionStatus.Granted), FakeCalendarRepository(), FakeKeyValueRepository(), FakeTimeProvider(now))
+        val viewModel = HomeViewModel(FakePermissionRepository(PermissionStatus.Granted), FakeCalendarRepository(), FakeKeyValueRepository(), FakeTimeProvider(now), FakeCalendarGroupRepository())
 
         assertNull(withTimeoutOrNull(1_000) { viewModel.events.first() })
     }
@@ -67,7 +68,7 @@ class HomeViewModelTest {
     @Test
     fun navigatesToOnboardingWhenPermissionGetsRevoked() = runTest {
         val repository = FakePermissionRepository(PermissionStatus.Granted)
-        val viewModel = HomeViewModel(repository, FakeCalendarRepository(), FakeKeyValueRepository(), FakeTimeProvider(now))
+        val viewModel = HomeViewModel(repository, FakeCalendarRepository(), FakeKeyValueRepository(), FakeTimeProvider(now), FakeCalendarGroupRepository())
 
         repository.status.value = PermissionStatus.PermanentlyDenied
 
@@ -151,6 +152,7 @@ class HomeViewModelTest {
             FakeCalendarRepository(),
             FakeKeyValueRepository(),
             FakeTimeProvider(now),
+            FakeCalendarGroupRepository(),
         )
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
 
@@ -179,6 +181,7 @@ class HomeViewModelTest {
             calendarRepository,
             FakeKeyValueRepository(),
             timeProvider,
+            FakeCalendarGroupRepository(),
         )
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         return viewModel to timeProvider
@@ -187,7 +190,7 @@ class HomeViewModelTest {
     @Test
     fun syncsActiveCalendarsWhenDeviceCalendarsChange() = runTest {
         val calendarRepository = FakeCalendarRepository()
-        HomeViewModel(FakePermissionRepository(PermissionStatus.Granted), calendarRepository, FakeKeyValueRepository(), FakeTimeProvider(now))
+        HomeViewModel(FakePermissionRepository(PermissionStatus.Granted), calendarRepository, FakeKeyValueRepository(), FakeTimeProvider(now), FakeCalendarGroupRepository())
         assertEquals(1, calendarRepository.syncCount)
 
         calendarRepository.accounts.value = listOf(

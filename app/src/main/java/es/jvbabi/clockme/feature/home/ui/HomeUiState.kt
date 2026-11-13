@@ -12,8 +12,13 @@ data class HomeUiState(
     val filter: TimeRangeFilter = TimeRangeFilter(),
     /** The [filter] resolved against the current time, `null` while loading. */
     val range: ResolvedTimeRange? = null,
-    /** Time per active calendar within [range], `null` while loading. */
+    /**
+     * Time per active calendar within [range], `null` while loading. Calendars of a group are
+     * next to each other: groups first, then calendars without a group.
+     */
     val calendars: List<CalendarTime>? = null,
+    /** Groups of the [calendars], in the same order. */
+    val groups: List<GroupInfo> = emptyList(),
     val selectedCalendarId: Long? = null,
     /** Events within [range], only of the selected calendar if there is one. */
     val events: List<EventItem> = emptyList(),
@@ -50,6 +55,13 @@ data class CalendarTime(
     @param:ColorInt val color: Int,
     /** Time covered by events of the calendar, overlapping events count once. */
     val duration: Duration,
+    val groupId: Long? = null,
+)
+
+data class GroupInfo(
+    val id: Long,
+    val name: String,
+    @param:ColorInt val color: Int?,
 )
 
 data class EventItem(

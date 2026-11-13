@@ -68,6 +68,7 @@ import es.jvbabi.clockme.core.ui.LocalAppStartState
 import es.jvbabi.clockme.core.ui.ObserveAsEvents
 import es.jvbabi.clockme.core.ui.RollingText
 import es.jvbabi.clockme.core.ui.chart.DonutChart
+import es.jvbabi.clockme.core.ui.chart.DonutGroup
 import es.jvbabi.clockme.core.ui.chart.DonutSlice
 import es.jvbabi.clockme.core.ui.formatDuration
 import es.jvbabi.clockme.core.ui.rememberTimeFormatter
@@ -158,6 +159,7 @@ internal fun HomeContent(
                     item {
                         CalendarRing(
                             calendars = calendars,
+                            groups = uiState.groups,
                             selected = uiState.selectedCalendar,
                             totalDuration = uiState.totalDuration,
                             selectionStrength = 1f - backProgress,
@@ -331,6 +333,7 @@ private val RangeShortcut.label: Int
 @Composable
 private fun CalendarRing(
     calendars: List<CalendarTime>,
+    groups: List<GroupInfo>,
     selected: CalendarTime?,
     totalDuration: Duration,
     selectionStrength: Float,
@@ -339,7 +342,15 @@ private fun CalendarRing(
     Box(Modifier.fillMaxWidth().padding(top = 16.dp), contentAlignment = Alignment.Center) {
         DonutChart(
             slices = calendars.map {
-                DonutSlice(id = it.calendarId, value = it.duration.inWholeSeconds.toFloat(), color = Color(it.color))
+                DonutSlice(
+                    id = it.calendarId,
+                    value = it.duration.inWholeSeconds.toFloat(),
+                    color = Color(it.color),
+                    groupId = it.groupId,
+                )
+            },
+            groups = groups.map { group ->
+                DonutGroup(group.id, group.color?.let(::Color) ?: MaterialTheme.colorScheme.outline)
             },
             selectedId = selected?.calendarId,
             selectionStrength = selectionStrength,

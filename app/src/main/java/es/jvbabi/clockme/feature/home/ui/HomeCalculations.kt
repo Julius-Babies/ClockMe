@@ -2,6 +2,7 @@ package es.jvbabi.clockme.feature.home.ui
 
 import es.jvbabi.clockme.data.calendar.CalendarAccount
 import es.jvbabi.clockme.data.calendar.EventSegment
+import es.jvbabi.clockme.data.group.CalendarGroup
 import es.jvbabi.clockme.domain.calendar.clipTo
 import es.jvbabi.clockme.domain.calendar.coveredDuration
 import kotlinx.datetime.DateTimeUnit
@@ -24,23 +25,39 @@ fun TimeRangeFilter.Companion.ofDay(date: LocalDate, timeZone: TimeZone) = TimeR
     to = date.plus(1, DateTimeUnit.DAY).atStartOfDayIn(timeZone),
 )
 
-/** Time per active calendar within [range], in the order of [activeAccounts]. */
+/**
+ * Time per active calendar within [range]. Calendars of a group are kept together: the groups in
+ * their order first, then the calendars without group, each in the order of [activeAccounts].
+ */
 fun calendarTimes(
     activeAccounts: List<CalendarAccount>,
     segments: List<EventSegment>,
     range: ResolvedTimeRange,
+    groups: List<CalendarGroup> = emptyList(),
 ): List<CalendarTime> {
     val clippedByCalendar = segments
         .mapNotNull { it.clipTo(range.from, range.to) }
         .groupBy { it.calendarId }
-    return activeAccounts.flatMap { it.calendars }.map { calendar ->
-        CalendarTime(
-            calendarId = calendar.id,
-            name = calendar.name,
-            color = calendar.color,
-            duration = clippedByCalendar[calendar.id].orEmpty().coveredDuration(),
-        )
-    }
+    val groupOf = groups.flatMap { group -> group.calendarIds.map { it to group.id } }.toMap()
+    val groupOrder = groups.mapIndexed { index, group -> group.id to index }.toMap()
+    return activeAccounts.flatMap { it.calendars }
+        .map { calendar ->
+            CalendarTime(
+                calendarId = calendar.id,
+                name = calendar.name,
+                color = calendar.color,
+                duration = clippedByCalendar[calendar.id].orEmpty().coveredDuration(),
+                groupId = groupOf[calendar.id],
+            )
+        }
+        // Stable: within a group and without group the account order stays
+        .sortedBy { calendar -> calendar.groupId?.let { groupOrder[it] } ?: Int.MAX_VALUE }
+}
+
+/** The groups that contain at least one of the [calendars], in their order. */
+fun groupInfos(groups: List<CalendarGroup>, calendars: List<CalendarTime>): List<GroupInfo> {
+    val usedGroupIds = calendars.mapNotNull { it.groupId }.toSet()
+    return groups.filter { it.id in usedGroupIds }.map { GroupInfo(it.id, it.name, it.color) }
 }
 
 /** Events within [range] in chronological order, like a calendar; only of [calendarId] unless it is `null`. */

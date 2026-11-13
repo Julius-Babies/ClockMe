@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import es.jvbabi.clockme.core.time.TimeProvider
 import es.jvbabi.clockme.data.calendar.CalendarRepository
+import es.jvbabi.clockme.data.group.CalendarGroupRepository
 import es.jvbabi.clockme.data.keyvalue.KeyValueKey
 import es.jvbabi.clockme.data.keyvalue.KeyValueRepository
 import es.jvbabi.clockme.data.keyvalue.observeInstant
@@ -39,6 +40,7 @@ class HomeViewModel(
     private val calendarRepository: CalendarRepository,
     keyValueRepository: KeyValueRepository,
     private val timeProvider: TimeProvider,
+    groupRepository: CalendarGroupRepository,
 ) : ViewModel() {
 
     /** A shortcut, or a custom filter if `null`. */
@@ -81,15 +83,15 @@ class HomeViewModel(
     val uiState: StateFlow<HomeUiState> = combine(
         rangeWithFilter,
         segments,
-        calendarRepository.observeActiveCalendars(),
+        combine(calendarRepository.observeActiveCalendars(), groupRepository.observeGroups(), ::Pair),
         combine(
             selectedCalendarId,
             keyValueRepository.observeInstant(KeyValueKey.LAST_EVENT_SYNC),
             permissionRepository.observe(AppPermission.READ_CALENDAR),
             ::Triple,
         ),
-    ) { (today, shortcut, filter, range), segments, activeAccounts, (selectedId, lastEventSync, permission) ->
-        val calendars = calendarTimes(activeAccounts, segments, range)
+    ) { (today, shortcut, filter, range), segments, (activeAccounts, groups), (selectedId, lastEventSync, permission) ->
+        val calendars = calendarTimes(activeAccounts, segments, range, groups)
         // Drop the selection if the calendar is gone
         val selected = selectedId?.takeIf { id -> calendars.any { it.calendarId == id } }
         HomeUiState(
@@ -98,6 +100,7 @@ class HomeViewModel(
             filter = filter,
             range = range,
             calendars = calendars,
+            groups = groupInfos(groups, calendars),
             selectedCalendarId = selected,
             events = eventItems(activeAccounts, segments, range, selected),
             lastEventSync = lastEventSync,

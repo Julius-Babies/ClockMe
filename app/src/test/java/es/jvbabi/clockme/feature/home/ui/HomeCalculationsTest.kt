@@ -3,6 +3,7 @@ package es.jvbabi.clockme.feature.home.ui
 import es.jvbabi.clockme.data.calendar.Calendar
 import es.jvbabi.clockme.data.calendar.CalendarAccount
 import es.jvbabi.clockme.data.calendar.EventSegment
+import es.jvbabi.clockme.data.group.CalendarGroup
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -75,6 +76,23 @@ class HomeCalculationsTest {
             ),
             calendarTimes(accounts, segments, range),
         )
+    }
+
+    @Test
+    fun calendarsOfAGroupAreNextToEachOtherBeforeUngroupedOnes() {
+        val uni = Calendar(id = 3, name = "Uni", color = 3)
+        val accounts = listOf(CalendarAccount(id = "LOCAL/Device", name = "Device", calendars = listOf(work, gym, uni)))
+        val groups = listOf(
+            CalendarGroup(id = 100, name = "Study", color = null, calendarIds = setOf(uni.id, work.id)),
+            CalendarGroup(id = 200, name = "Empty", color = null, calendarIds = emptySet()),
+        )
+        val range = ResolvedTimeRange(at("00:00"), at("15:00"))
+
+        val calendars = calendarTimes(accounts, emptyList(), range, groups)
+
+        assertEquals(listOf(work.id, uni.id, gym.id), calendars.map { it.calendarId })
+        assertEquals(listOf(100L, 100L, null), calendars.map { it.groupId })
+        assertEquals(listOf(GroupInfo(100, "Study", null)), groupInfos(groups, calendars))
     }
 
     @Test

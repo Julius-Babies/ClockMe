@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
@@ -42,6 +43,14 @@ import kotlin.math.hypot
 data class DonutSlice(
     val id: Long,
     val value: Float,
+    val color: Color,
+    /** Slices of a group must be next to each other, the group's band is drawn around them. */
+    val groupId: Long? = null,
+)
+
+/** A band drawn outside the ring around the slices of the group. */
+data class DonutGroup(
+    val id: Long,
     val color: Color,
 )
 
@@ -77,6 +86,9 @@ fun DonutChart(
     selectionStrength: Float = 1f,
     /** The ring stays hidden until this is true, then unfolds; e.g. to wait for a splash screen. */
     playIntro: Boolean = true,
+    groups: List<DonutGroup> = emptyList(),
+    groupBandWidth: Dp = 5.dp,
+    groupBandGap: Dp = 4.dp,
     centerContent: @Composable () -> Unit = {},
 ) {
     val intro = remember { Animatable(0f) }
@@ -98,6 +110,10 @@ fun DonutChart(
 
     val values = animatedValues(shownSlices)
     val colors = rememberColors(shownSlices)
+    val groupOfSlice = rememberGroups(shownSlices)
+    val groupColors = groups.associate { it.id to it.color }
+    // Room for the bands only if there are groups, so the ring keeps its size otherwise
+    val hasGroups = groups.isNotEmpty()
     // Slices that left are kept until they have shrunk away
     val ids = (shownSlices.map { it.id } + values.keys).distinct()
 
@@ -117,6 +133,7 @@ fun DonutChart(
     val currentIds by rememberUpdatedState(ids)
     val currentValues by rememberUpdatedState(values)
     val currentIsEmpty by rememberUpdatedState(isEmpty)
+    val currentHasGroups by rememberUpdatedState(hasGroups)
 
     Box(modifier, contentAlignment = Alignment.Center) {
         Canvas(
@@ -124,7 +141,14 @@ fun DonutChart(
                 .fillMaxSize()
                 .pointerInput(Unit) {
                     detectTapGestures { tap ->
-                        val geometry = RingGeometry(size.width.toFloat(), size.height.toFloat(), strokeWidth.toPx(), selectedExtraWidth.toPx())
+                        val geometry = RingGeometry(
+                            size.width.toFloat(),
+                            size.height.toFloat(),
+                            strokeWidth.toPx(),
+                            selectedExtraWidth.toPx(),
+                            band = if (currentHasGroups) groupBandWidth.toPx() else 0f,
+                            bandGap = if (currentHasGroups) groupBandGap.toPx() else 0f,
+                        )
                         val id = if (currentIsEmpty) {
                             null
                         } else {
@@ -135,16 +159,26 @@ fun DonutChart(
                     }
                 },
         ) {
-            val geometry = RingGeometry(size.width, size.height, strokeWidth.toPx(), selectedExtraWidth.toPx())
+            val geometry = RingGeometry(
+                size.width,
+                size.height,
+                strokeWidth.toPx(),
+                selectedExtraWidth.toPx(),
+                band = if (hasGroups) groupBandWidth.toPx() else 0f,
+                bandGap = if (hasGroups) groupBandGap.toPx() else 0f,
+            )
+            // While unfolding the ring also grows from its outer edge inwards
+            val stroke = geometry.stroke * intro.value
+            val ringRadius = geometry.outerEdge - stroke / 2f
             val total = ids.sumOf { (values[it] ?: 0f).toDouble() }.toFloat()
             // The track only stands in for an empty ring, so the gaps between slices stay clear
             val trackAlpha = (1f - fill) * intro.value
             if (trackAlpha > 0f) {
                 drawCircle(
                     color = trackColor.copy(alpha = trackColor.alpha * trackAlpha),
-                    radius = geometry.radius,
+                    radius = ringRadius,
                     center = geometry.center,
-                    style = Stroke(geometry.stroke),
+                    style = Stroke(stroke),
                 )
             }
             if (total <= 0f || fill <= 0f) return@Canvas
@@ -155,6 +189,9 @@ fun DonutChart(
             rotate(INTRO_ROTATION_DEGREES * (1f - intro.value), geometry.center) {
                 // Unfolds clockwise from the top
                 var angle = -90f
+                // Start and end angle of each group, for the bands
+                val groupArcs = linkedMapOf<Long, Pair<Float, Float>>()
+                val selectedGroup = selectedId?.let { groupOfSlice[it] }
                 ids.forEach { id ->
                     val value = values[id] ?: 0f
                     if (value <= 0f) return@forEach
@@ -162,9 +199,9 @@ fun DonutChart(
                     val (fullSelected, fullAlpha) = selection[id] ?: (0f to 1f)
                     val selected = fullSelected * selectionStrength
                     val alpha = lerp(1f, fullAlpha, selectionStrength)
-                    val width = geometry.stroke + geometry.extra * selected
+                    val width = stroke + geometry.extra * selected
                     // Grow outwards only, the inner edge stays
-                    val radius = geometry.radius + geometry.extra * selected / 2f
+                    val radius = ringRadius + geometry.extra * selected / 2f
                     drawArc(
                         color = (colors[id] ?: Color.Gray).copy(alpha = alpha),
                         startAngle = angle + gap / 2f,
@@ -174,7 +211,29 @@ fun DonutChart(
                         size = Size(radius * 2f, radius * 2f),
                         style = Stroke(width),
                     )
+                    groupOfSlice[id]?.let { groupId ->
+                        val (start, _) = groupArcs[groupId] ?: (angle to angle)
+                        groupArcs[groupId] = start to angle + sweep
+                    }
                     angle += sweep
+                }
+
+                val band = geometry.band * intro.value
+                val bandRadius = geometry.bandOuterEdge - band / 2f
+                groupArcs.forEach { (groupId, arc) ->
+                    val (start, end) = arc
+                    // Fades with the slices when a slice of another group is selected
+                    val dimmed = selectedId != null && selectedGroup != groupId
+                    val alpha = if (dimmed) lerp(1f, DIMMED_ALPHA, selectionStrength) else 1f
+                    drawArc(
+                        color = (groupColors[groupId] ?: Color.Gray).copy(alpha = alpha),
+                        startAngle = start + gap / 2f,
+                        sweepAngle = (end - start - gap).coerceAtLeast(0f),
+                        useCenter = false,
+                        topLeft = Offset(geometry.center.x - bandRadius, geometry.center.y - bandRadius),
+                        size = Size(bandRadius * 2f, bandRadius * 2f),
+                        style = Stroke(band, cap = StrokeCap.Round),
+                    )
                 }
             }
         }
@@ -212,6 +271,14 @@ private fun animatedValues(slices: List<DonutSlice>): Map<Long, Float> {
     return current()
 }
 
+/** Groups by slice id, remembering the ones of removed slices for their exit animation. */
+@Composable
+private fun rememberGroups(slices: List<DonutSlice>): Map<Long, Long> {
+    val groups = remember { mutableMapOf<Long, Long>() }
+    slices.forEach { slice -> if (slice.groupId != null) groups[slice.id] = slice.groupId else groups.remove(slice.id) }
+    return groups
+}
+
 /** Colors by id, remembering the ones of removed slices for their exit animation. */
 @Composable
 private fun rememberColors(slices: List<DonutSlice>): Map<Long, Color> {
@@ -220,11 +287,23 @@ private fun rememberColors(slices: List<DonutSlice>): Map<Long, Color> {
     return colors
 }
 
-private class RingGeometry(width: Float, height: Float, val stroke: Float, val extra: Float) {
+private class RingGeometry(
+    width: Float,
+    height: Float,
+    val stroke: Float,
+    val extra: Float,
+    val band: Float = 0f,
+    bandGap: Float = 0f,
+) {
     val center = Offset(width / 2f, height / 2f)
 
-    /** Radius of the middle of the ring; leaves room for a selected slice to grow. */
-    val radius = (minOf(width, height) - stroke - 2f * extra) / 2f
+    /** Radius of the middle of the ring; leaves room for a selected slice and group bands. */
+    val radius = (minOf(width, height) - stroke - 2f * extra - 2f * (bandGap + band)) / 2f
+
+    val outerEdge = radius + stroke / 2f
+
+    /** Group bands lie outside a fully grown selected slice. */
+    val bandOuterEdge = outerEdge + extra + bandGap + band
 
     /** The slice at [point], `null` if it is not on the ring. Assumes the intro has finished. */
     fun sliceAt(point: Offset, slices: List<Pair<Long, Float>>): Long? {
