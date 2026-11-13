@@ -16,9 +16,11 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
 import kotlinx.datetime.toInstant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -158,6 +160,45 @@ class HomeViewModelTest {
             viewModel.uiState.value.range,
         )
         assertEquals(emptyList<Long>(), viewModel.uiState.value.events.map { it.eventId })
+    }
+
+    @Test
+    fun pagesThroughTheUnitOfTheShortcutWithNeighboursLoaded() = runTest {
+        val (viewModel, _) = viewModelWithEvents()
+        assertEquals(PageUnit.DAY, viewModel.uiState.value.unit)
+        // No pages in the future
+        assertEquals(setOf(-1, 0), viewModel.uiState.value.pages.keys)
+
+        viewModel.onPageChange(-1)
+
+        val state = viewModel.uiState.value
+        assertEquals(-1, state.pageOffset)
+        assertEquals(setOf(-2, -1, 0), state.pages.keys)
+        assertEquals(ResolvedTimeRange(at("00:00") - 24.hours, at("00:00")), state.range)
+        assertEquals(today.minus(1, DateTimeUnit.DAY), state.currentPage!!.firstDay)
+        // Today's page stays ready for swiping back
+        assertEquals(90.minutes, state.pages.getValue(0).totalDuration)
+
+        viewModel.onPageChange(1)
+        assertEquals(0, viewModel.uiState.value.pageOffset)
+    }
+
+    @Test
+    fun shortcutJumpsToItsPage() = runTest {
+        val (viewModel, _) = viewModelWithEvents()
+        viewModel.onPageChange(-5)
+
+        viewModel.onShortcutSelect(RangeShortcut.LAST_WEEK)
+        assertEquals(PageUnit.WEEK, viewModel.uiState.value.unit)
+        assertEquals(-1, viewModel.uiState.value.pageOffset)
+
+        viewModel.onShortcutSelect(RangeShortcut.ALL)
+        assertNull(viewModel.uiState.value.unit)
+        assertEquals(0, viewModel.uiState.value.pageOffset)
+        // All time has a single page
+        viewModel.onPageChange(-1)
+        assertEquals(0, viewModel.uiState.value.pageOffset)
+        assertEquals(setOf(0), viewModel.uiState.value.pages.keys)
     }
 
     @Test

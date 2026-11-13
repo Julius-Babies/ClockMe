@@ -22,6 +22,10 @@
     <string name="home_shortcut_this_month">This month</string>
     <string name="home_shortcut_last_month">Last month</string>
     <string name="home_shortcut_all">All time</string>
+    <string name="home_page_week">Week %1$d</string>
+    <string name="home_page_previous">Previous</string>
+    <string name="home_page_next">Next</string>
+    <string name="home_page_range" translatable="false">%1$s – %2$s</string>
     <string name="home_total">Total</string>
     <string name="home_events">Events</string>
     <string name="home_events_of_calendar">Events · %1$s</string>

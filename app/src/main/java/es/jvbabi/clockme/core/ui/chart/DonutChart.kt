@@ -94,6 +94,8 @@ fun DonutChart(
     selectionStrength: Float = 1f,
     /** The ring stays hidden until this is true, then unfolds; e.g. to wait for a splash screen. */
     playIntro: Boolean = true,
+    /** `false` shows the ring right away without unfolding, e.g. for later pages of a pager. */
+    animateIntro: Boolean = true,
     groups: List<DonutGroup> = emptyList(),
     selectedGroupId: Long? = null,
     onGroupClick: (Long) -> Unit = {},
@@ -103,7 +105,7 @@ fun DonutChart(
     groupTouchPadding: Dp = 8.dp,
     centerContent: @Composable () -> Unit = {},
 ) {
-    val intro = remember { Animatable(0f) }
+    val intro = remember { Animatable(if (animateIntro) 0f else 1f) }
     LaunchedEffect(playIntro) {
         if (playIntro) intro.animateTo(1f, tween(INTRO_MILLIS, easing = EaseOutCubic))
     }

@@ -4,6 +4,8 @@ import androidx.activity.ComponentActivity
 import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.click
@@ -54,6 +56,7 @@ class HomeContentTest {
     private val groupSelections = mutableListOf<Long>()
     private var selectionsCleared = 0
     private val shortcuts = mutableListOf<RangeShortcut>()
+    private val pageChanges = mutableListOf<Int>()
 
     private fun setContent(state: HomeUiState) {
         compose.setContent {
@@ -64,6 +67,7 @@ class HomeContentTest {
                     onGroupSelect = { groupSelections += it },
                     onClearSelection = { selectionsCleared++ },
                     onShortcutSelect = { shortcuts += it },
+                    onPageChange = { pageChanges += it },
                 )
             }
         }
@@ -72,9 +76,25 @@ class HomeContentTest {
     private val state = HomeUiState(
         shortcuts = RangeShortcut.entries,
         selectedShortcut = RangeShortcut.TODAY,
-        range = ResolvedTimeRange(now - 600.minutes, now),
-        calendars = listOf(work, gym),
-        events = listOf(standup, workout),
+        today = today,
+        unit = PageUnit.DAY,
+        hasActiveCalendars = true,
+    ).withPage(calendars = listOf(work, gym), events = listOf(standup, workout))
+
+    /** The current page (offset [HomeUiState.pageOffset]) with [calendars] and [events]. */
+    private fun HomeUiState.withPage(
+        calendars: List<CalendarTime> = this.calendars.orEmpty(),
+        events: List<EventItem> = this.events,
+    ) = copy(
+        pages = mapOf(
+            pageOffset to HomePage(
+                offset = pageOffset,
+                firstDay = unit?.firstDay(today!!, pageOffset),
+                range = ResolvedTimeRange(now - 600.minutes, now),
+                calendars = calendars,
+                events = events,
+            ),
+        ),
     )
 
     @Test
@@ -87,7 +107,7 @@ class HomeContentTest {
 
     @Test
     fun showsSelectedCalendarInTheCenterAndInTheListTitle() {
-        setContent(state.copy(selectedCalendarId = gym.calendarId, events = listOf(workout)))
+        setContent(state.copy(selectedCalendarId = gym.calendarId).withPage(events = listOf(workout)))
 
         compose.onNodeWithText(gym.name).assertIsDisplayed()
         compose.onNodeWithContentDescription(string(R.string.duration_minutes, 30)).assertIsDisplayed()
@@ -106,14 +126,14 @@ class HomeContentTest {
 
     @Test
     fun showsHintWithoutEvents() {
-        setContent(state.copy(events = emptyList()))
+        setContent(state.withPage(events = emptyList()))
 
         compose.onNodeWithText(string(R.string.home_no_events)).assertIsDisplayed()
     }
 
     @Test
     fun showsHintWithoutActiveCalendars() {
-        setContent(state.copy(calendars = emptyList(), events = emptyList()))
+        setContent(state.copy(hasActiveCalendars = false, pages = emptyMap()))
 
         compose.onNodeWithText(string(R.string.home_no_active_calendars)).assertIsDisplayed()
     }
@@ -145,8 +165,9 @@ class HomeContentTest {
     }
 
     private val sport = GroupInfo(id = 7, name = "Sport", color = null)
-    private val groupedState = state.copy(
+    private val groupedState get() = state.withPage(
         calendars = listOf(gym.copy(groupId = sport.id), work),
+    ).copy(
         groups = listOf(sport),
     )
 
@@ -169,7 +190,7 @@ class HomeContentTest {
 
     @Test
     fun showsSelectedGroupInTheCenterAndInTheListTitle() {
-        setContent(groupedState.copy(selectedGroupId = sport.id, events = listOf(workout)))
+        setContent(groupedState.copy(selectedGroupId = sport.id).withPage(events = listOf(workout)))
 
         compose.onNodeWithText(sport.name).assertIsDisplayed()
         compose.onNodeWithContentDescription(string(R.string.duration_minutes, 30)).assertIsDisplayed()
@@ -233,6 +254,39 @@ class HomeContentTest {
         compose.runOnUiThread {
             assertFalse(compose.activity.onBackPressedDispatcher.hasEnabledCallbacks())
         }
+    }
+
+    @Test
+    fun namesThePageAndPagesWithTheButtons() {
+        setContent(state.copy(pageOffset = -1).withPage())
+
+        // Wednesday, Nov 11 in the device's language, without year
+        compose.onNodeWithTag(HomeTestTags.PAGE_LABEL).assertTextContains("11", substring = true)
+        compose.onNodeWithContentDescription(string(R.string.home_page_previous)).performClick()
+        compose.onNodeWithContentDescription(string(R.string.home_page_next)).performClick()
+
+        assertEquals(listOf(-2, 0), pageChanges.filter { it != -1 })
+    }
+
+    @Test
+    fun cannotPageIntoTheFuture() {
+        setContent(state)
+
+        compose.onNodeWithContentDescription(string(R.string.home_page_next)).assertIsNotEnabled()
+    }
+
+    @Test
+    fun weekPagesShowTheWeekNumberAndTheirDays() {
+        setContent(state.copy(unit = PageUnit.WEEK, selectedShortcut = RangeShortcut.THIS_WEEK).withPage())
+
+        compose.onNodeWithText(string(R.string.home_page_week, 46)).assertIsDisplayed()
+    }
+
+    @Test
+    fun allTimeHasNoPages() {
+        setContent(state.copy(unit = null, selectedShortcut = RangeShortcut.ALL).withPage())
+
+        compose.onNodeWithTag(HomeTestTags.PAGE_LABEL).assertDoesNotExist()
     }
 
     /** Taps the ring at [angleDegrees] clockwise from the top, or its center if `null`. */

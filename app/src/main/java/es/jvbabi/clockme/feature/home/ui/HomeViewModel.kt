@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import es.jvbabi.clockme.core.time.TimeProvider
 import es.jvbabi.clockme.data.calendar.CalendarRepository
+import es.jvbabi.clockme.data.calendar.EventSegment
 import es.jvbabi.clockme.data.group.CalendarGroupRepository
 import es.jvbabi.clockme.data.keyvalue.KeyValueKey
 import es.jvbabi.clockme.data.keyvalue.KeyValueRepository
@@ -43,9 +44,14 @@ class HomeViewModel(
     groupRepository: CalendarGroupRepository,
 ) : ViewModel() {
 
-    /** A shortcut, or a custom filter if `null`. */
-    private val selectedShortcut = MutableStateFlow<RangeShortcut?>(RangeShortcut.TODAY)
-    private val customFilter = MutableStateFlow(TimeRangeFilter())
+    /** What home shows: a shortcut (or a custom filter if `null`) and the page within its unit. */
+    private data class Mode(
+        val shortcut: RangeShortcut? = RangeShortcut.TODAY,
+        val customFilter: TimeRangeFilter = TimeRangeFilter(),
+        val offset: Int = 0,
+    )
+
+    private val mode = MutableStateFlow(Mode())
     private val selection = MutableStateFlow<Selection?>(null)
 
     private sealed interface Selection {
@@ -53,40 +59,55 @@ class HomeViewModel(
         data class Group(val id: Long) : Selection
     }
 
-    private data class Range(
-        val today: LocalDate,
-        val shortcut: RangeShortcut?,
+    private data class PageRange(
+        val offset: Int,
+        val firstDay: LocalDate?,
         val filter: TimeRangeFilter,
         val resolved: ResolvedTimeRange,
+        val days: ClosedRange<LocalDate>,
     )
 
-    private val rangeWithFilter = combine(
-        selectedShortcut,
-        customFilter,
-        timeProvider.ticks(1.seconds),
-    ) { shortcut, customFilter, now ->
+    private data class Pages(val today: LocalDate, val mode: Mode, val pages: List<PageRange>) {
+        val days: ClosedRange<LocalDate> get() = pages.minOf { it.days.start }..pages.maxOf { it.days.endInclusive }
+    }
+
+    /** The current page and its neighbours, so they are ready while swiping. */
+    private val pages = combine(mode, timeProvider.ticks(1.seconds)) { mode, now ->
         val timeZone = timeProvider.timeZone()
         val today = now.toLocalDateTime(timeZone).date
-        val filter = shortcut?.toFilter(today, timeZone) ?: customFilter
-        Range(today, shortcut, filter, filter.resolve(now, timeZone))
+        val unit = mode.shortcut?.unit
+        val offsets = if (unit == null) listOf(0) else (mode.offset - 1..mode.offset + 1).filter { it <= 0 }
+        val pages = offsets.map { offset ->
+            val filter = unit?.filter(today, offset, timeZone)
+                ?: mode.shortcut?.toFilter(today, timeZone)
+                ?: mode.customFilter
+            val resolved = filter.resolve(now, timeZone)
+            PageRange(
+                offset = offset,
+                firstDay = unit?.firstDay(today, offset),
+                filter = filter,
+                resolved = resolved,
+                days = resolved.from.toLocalDateTime(timeZone).date..resolved.to.toLocalDateTime(timeZone).date,
+            )
+        }
+        Pages(today, mode, pages)
     }
         // One clock for the whole state
         .shareIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
 
-    private val range = rangeWithFilter.map { it.resolved }
+    private data class LoadedSegments(val days: ClosedRange<LocalDate>, val segments: List<EventSegment>)
 
-    /** Only re-queried when the range covers other days, not on every tick. */
+    /** Only re-queried when the pages cover other days, not on every tick. */
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val segments = range
-        .map { range ->
-            val timeZone = timeProvider.timeZone()
-            range.from.toLocalDateTime(timeZone).date..range.to.toLocalDateTime(timeZone).date
-        }
+    private val segments = pages
+        .map { it.days }
         .distinctUntilChanged()
-        .flatMapLatest { days -> calendarRepository.observeEventSegments(days.start, days.endInclusive) }
+        .flatMapLatest { days ->
+            calendarRepository.observeEventSegments(days.start, days.endInclusive).map { LoadedSegments(days, it) }
+        }
 
     val uiState: StateFlow<HomeUiState> = combine(
-        rangeWithFilter,
+        pages,
         segments,
         combine(calendarRepository.observeActiveCalendars(), groupRepository.observeGroups(), ::Pair),
         combine(
@@ -95,28 +116,43 @@ class HomeViewModel(
             permissionRepository.observe(AppPermission.READ_CALENDAR),
             ::Triple,
         ),
-    ) { (today, shortcut, filter, range), segments, (activeAccounts, groups), (selection, lastEventSync, permission) ->
-        val calendars = calendarTimes(activeAccounts, segments, range, groups)
+    ) { pages, loaded, (activeAccounts, groups), (selection, lastEventSync, permission) ->
+        val activeIds = activeAccounts.flatMap { it.calendars }.map { it.id }.toSet()
         // Drop the selection if the calendar or group is gone
-        val selectedCalendar = (selection as? Selection.Calendar)?.id
-            ?.takeIf { id -> calendars.any { it.calendarId == id } }
+        val selectedCalendar = (selection as? Selection.Calendar)?.id?.takeIf { it in activeIds }
         val selectedGroup = (selection as? Selection.Group)?.id
-            ?.takeIf { id -> calendars.any { it.groupId == id } }
+            ?.let { id -> groups.find { it.id == id } }
+            ?.takeIf { group -> group.calendarIds.any { it in activeIds } }
         val shownCalendarIds = when {
             selectedCalendar != null -> setOf(selectedCalendar)
-            selectedGroup != null -> calendars.filter { it.groupId == selectedGroup }.map { it.calendarId }.toSet()
+            selectedGroup != null -> selectedGroup.calendarIds intersect activeIds
             else -> null
         }
+        val homePages = pages.pages
+            // Pages whose days are not loaded yet would show too little
+            .filter { it.days.start >= loaded.days.start && it.days.endInclusive <= loaded.days.endInclusive }
+            .map { page ->
+                HomePage(
+                    offset = page.offset,
+                    firstDay = page.firstDay,
+                    range = page.resolved,
+                    calendars = calendarTimes(activeAccounts, loaded.segments, page.resolved, groups),
+                    events = eventItems(activeAccounts, loaded.segments, page.resolved, shownCalendarIds),
+                )
+            }
+            .associateBy { it.offset }
         HomeUiState(
-            shortcuts = RangeShortcut.available(today),
-            selectedShortcut = shortcut,
-            filter = filter,
-            range = range,
-            calendars = calendars,
-            groups = groupInfos(groups, calendars),
+            shortcuts = RangeShortcut.available(pages.today),
+            selectedShortcut = pages.mode.shortcut,
+            filter = pages.pages.first { it.offset == pages.mode.offset }.filter,
+            today = pages.today,
+            unit = pages.mode.shortcut?.unit,
+            pageOffset = pages.mode.offset,
+            pages = homePages,
+            hasActiveCalendars = activeIds.isNotEmpty(),
+            groups = groupInfos(groups, homePages.values.firstOrNull()?.calendars.orEmpty()),
             selectedCalendarId = selectedCalendar,
-            selectedGroupId = selectedGroup,
-            events = eventItems(activeAccounts, segments, range, shownCalendarIds),
+            selectedGroupId = selectedGroup?.id,
             lastEventSync = lastEventSync,
             hasCalendarPermission = permission == PermissionStatus.Granted,
         )
@@ -155,13 +191,18 @@ class HomeViewModel(
         selection.value = null
     }
 
+    /** Shows the shortcut's own page, from where the user can page through its unit. */
     fun onShortcutSelect(shortcut: RangeShortcut) {
-        selectedShortcut.value = shortcut
+        mode.update { it.copy(shortcut = shortcut, offset = shortcut.anchorOffset) }
+    }
+
+    /** Goes to the page [offset] units from the current one; there are no pages in the future. */
+    fun onPageChange(offset: Int) {
+        mode.update { if (it.shortcut?.unit == null) it else it.copy(offset = offset.coerceAtMost(0)) }
     }
 
     /** Uses a custom range instead of a shortcut. */
     fun onFilterChange(filter: TimeRangeFilter) {
-        customFilter.value = filter
-        selectedShortcut.value = null
+        mode.value = Mode(shortcut = null, customFilter = filter)
     }
 }

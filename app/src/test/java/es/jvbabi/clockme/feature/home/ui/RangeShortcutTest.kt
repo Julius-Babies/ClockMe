@@ -17,14 +17,34 @@ class RangeShortcutTest {
     private val today = LocalDate.parse("2026-11-12")
 
     @Test
-    fun rangesEndWithToday() {
-        val end = startOf("2026-11-13")
-
-        assertEquals(TimeRangeFilter(startOf("2026-11-12"), end), RangeShortcut.TODAY.toFilter(today, berlin))
+    fun shortcutsAreWholeUnits() {
+        // The current ones are capped at now once resolved
+        assertEquals(TimeRangeFilter(startOf("2026-11-12"), startOf("2026-11-13")), RangeShortcut.TODAY.toFilter(today, berlin))
         assertEquals(TimeRangeFilter(startOf("2026-11-11"), startOf("2026-11-12")), RangeShortcut.YESTERDAY.toFilter(today, berlin))
-        assertEquals(TimeRangeFilter(startOf("2026-11-09"), end), RangeShortcut.THIS_WEEK.toFilter(today, berlin))
-        assertEquals(TimeRangeFilter(startOf("2026-11-01"), end), RangeShortcut.THIS_MONTH.toFilter(today, berlin))
-        assertEquals(TimeRangeFilter(startOf("1970-01-01"), end), RangeShortcut.ALL.toFilter(today, berlin))
+        assertEquals(TimeRangeFilter(startOf("2026-11-09"), startOf("2026-11-16")), RangeShortcut.THIS_WEEK.toFilter(today, berlin))
+        assertEquals(TimeRangeFilter(startOf("2026-11-01"), startOf("2026-12-01")), RangeShortcut.THIS_MONTH.toFilter(today, berlin))
+        assertEquals(TimeRangeFilter(startOf("1970-01-01"), startOf("2026-11-13")), RangeShortcut.ALL.toFilter(today, berlin))
+    }
+
+    @Test
+    fun pagesGoBackUnitByUnit() {
+        assertEquals(LocalDate.parse("2026-11-09"), PageUnit.DAY.firstDay(today, -3))
+        assertEquals(LocalDate.parse("2026-10-26"), PageUnit.WEEK.firstDay(today, -2))
+        assertEquals(LocalDate.parse("2025-12-01"), PageUnit.MONTH.firstDay(today, -11))
+        assertEquals(
+            TimeRangeFilter(startOf("2026-10-26"), startOf("2026-11-02")),
+            PageUnit.WEEK.filter(today, -2, berlin),
+        )
+    }
+
+    @Test
+    fun isoWeekNumbers() {
+        assertEquals(46, today.isoWeekNumber)
+        // Week 1 contains the first Thursday of the year
+        assertEquals(53, LocalDate.parse("2027-01-01").isoWeekNumber)
+        assertEquals(1, LocalDate.parse("2027-01-04").isoWeekNumber)
+        assertEquals(1, LocalDate.parse("2025-12-29").isoWeekNumber)
+        assertEquals(52, LocalDate.parse("2025-12-28").isoWeekNumber)
     }
 
     @Test

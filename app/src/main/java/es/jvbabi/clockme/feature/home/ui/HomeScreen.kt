@@ -1,6 +1,26 @@
 package es.jvbabi.clockme.feature.home.ui
 
 import android.text.format.DateUtils
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import com.phosphor.icons.PhIcons
+import com.phosphor.icons.regular.CaretLeft
+import com.phosphor.icons.regular.CaretRight
+import kotlin.math.roundToInt
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.LocalDate
 import androidx.compose.ui.platform.LocalContext
@@ -12,6 +32,7 @@ import androidx.compose.runtime.key
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.animateColorAsState
@@ -103,12 +124,15 @@ fun HomeScreen(
         onGroupSelect = viewModel::onGroupSelect,
         onClearSelection = viewModel::onClearSelection,
         onShortcutSelect = viewModel::onShortcutSelect,
+        onPageChange = viewModel::onPageChange,
     )
 }
 
 object HomeTestTags {
     const val RING = "home_ring"
     const val SHORTCUTS = "home_shortcuts"
+    const val PAGER = "home_pager"
+    const val PAGE_LABEL = "home_page_label"
 }
 
 @Composable
@@ -118,6 +142,7 @@ internal fun HomeContent(
     onGroupSelect: (Long) -> Unit,
     onClearSelection: () -> Unit,
     onShortcutSelect: (RangeShortcut) -> Unit,
+    onPageChange: (Int) -> Unit,
 ) {
     // 0 while no back gesture is running, up to 1 while the user swipes back
     var backProgress by remember { mutableFloatStateOf(0f) }
@@ -132,15 +157,14 @@ internal fun HomeContent(
     }
 
     Scaffold { innerPadding ->
-        val calendars = uiState.calendars
         Box(Modifier.fillMaxSize()) {
-            when {
-                calendars == null -> Box(
+            when (uiState.hasActiveCalendars) {
+                null -> Box(
                     modifier = Modifier.fillMaxSize().padding(innerPadding),
                     contentAlignment = Alignment.Center,
                 ) { CircularProgressIndicator() }
 
-                calendars.isEmpty() -> Box(
+                false -> Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(top = innerPadding.calculateTopPadding(), bottom = LocalBottomNavBarHeight.current)
@@ -150,59 +174,283 @@ internal fun HomeContent(
                     Text(stringResource(R.string.home_no_active_calendars), textAlign = TextAlign.Center)
                 }
 
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        top = innerPadding.calculateTopPadding() + 16.dp,
-                        bottom = LocalBottomNavBarHeight.current + 16.dp,
-                    ),
-                ) {
-                    item { Header(uiState, onShortcutSelect) }
-                    item {
-                        CalendarRing(
-                            uiState = uiState,
-                            calendars = calendars,
-                            selectionStrength = 1f - backProgress,
-                            onCalendarSelect = onCalendarSelect,
-                            onGroupSelect = onGroupSelect,
-                            onClearSelection = onClearSelection,
-                        )
-                    }
-                    item {
-                        val selectedName = uiState.selectedCalendar?.name ?: uiState.selectedGroup?.name
-                        Text(
-                            text = selectedName
-                                ?.let { stringResource(R.string.home_events_of_calendar, it) }
-                                ?: stringResource(R.string.home_events),
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp),
-                        )
-                    }
-                    if (uiState.events.isEmpty()) {
-                        item {
-                            Text(
-                                text = stringResource(R.string.home_no_events),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            )
-                        }
-                    }
-                    val eventsByDay = uiState.events.groupBy { it.date }
-                    eventsByDay.forEach { (date, events) ->
-                        if (eventsByDay.size > 1) {
-                            item(key = "day-$date") { DayHeader(date, Modifier.animateItem()) }
-                        }
-                        items(events, key = { "${it.eventId}-${it.start.toEpochMilliseconds()}" }) { event ->
-                            EventRow(event, Modifier.animateItem())
-                        }
-                    }
-                }
+                true -> HomePager(
+                    uiState = uiState,
+                    topInset = innerPadding.calculateTopPadding(),
+                    selectionStrength = 1f - backProgress,
+                    onCalendarSelect = onCalendarSelect,
+                    onGroupSelect = onGroupSelect,
+                    onClearSelection = onClearSelection,
+                    onShortcutSelect = onShortcutSelect,
+                    onPageChange = onPageChange,
+                )
             }
             LastSyncHint(
                 lastSync = uiState.lastEventSync,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = LocalBottomNavBarHeight.current + 8.dp),
+            )
+        }
+    }
+}
+
+/** Pages far enough into the past; the last one is the current unit. */
+private const val PAGE_COUNT = 100_000
+private const val CURRENT_PAGE = PAGE_COUNT - 1
+
+/**
+ * The whole screen pages horizontally through the units of the selected shortcut, under a
+ * header with the shortcuts that stays on top and floats once the page is scrolled.
+ */
+@Composable
+private fun HomePager(
+    uiState: HomeUiState,
+    topInset: Dp,
+    selectionStrength: Float,
+    onCalendarSelect: (Long?) -> Unit,
+    onGroupSelect: (Long) -> Unit,
+    onClearSelection: () -> Unit,
+    onShortcutSelect: (RangeShortcut) -> Unit,
+    onPageChange: (Int) -> Unit,
+) {
+    val pagerState = rememberPagerState(initialPage = CURRENT_PAGE + uiState.pageOffset) { PAGE_COUNT }
+
+    // Follow the state: jump when the unit changes, slide to neighbouring pages otherwise
+    var shownUnit by remember { mutableStateOf(uiState.unit) }
+    LaunchedEffect(uiState.unit, uiState.pageOffset) {
+        val target = CURRENT_PAGE + uiState.pageOffset
+        if (uiState.unit != shownUnit) {
+            shownUnit = uiState.unit
+            pagerState.scrollToPage(target)
+        } else if (pagerState.currentPage != target) {
+            pagerState.animateScrollToPage(target)
+        }
+    }
+    val currentOnPageChange by rememberUpdatedState(onPageChange)
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage }.collect { currentOnPageChange(it - CURRENT_PAGE) }
+    }
+
+    // Scroll state of each composed page, so the header knows whether the current one is scrolled
+    val listStates = remember { mutableStateMapOf<Int, LazyListState>() }
+    val scrolled by remember {
+        derivedStateOf {
+            listStates[pagerState.currentPage]
+                ?.let { it.firstVisibleItemIndex > 0 || it.firstVisibleItemScrollOffset > 0 }
+                ?: false
+        }
+    }
+    // Only the page shown at the start unfolds, pages swiped to later are just there
+    val splashDismissed by LocalAppStartState.current.splashDismissed.collectAsStateWithLifecycle()
+    var introPlayed by remember { mutableStateOf(false) }
+    LaunchedEffect(splashDismissed) { if (splashDismissed) introPlayed = true }
+    val density = LocalDensity.current
+    var headerHeight by remember { mutableStateOf(0.dp) }
+
+    Box(Modifier.fillMaxSize()) {
+        HorizontalPager(
+            state = pagerState,
+            userScrollEnabled = uiState.unit != null,
+            modifier = Modifier.fillMaxSize().testTag(HomeTestTags.PAGER),
+        ) { index ->
+            val listState = rememberLazyListState()
+            DisposableEffect(index, listState) {
+                listStates[index] = listState
+                onDispose { listStates.remove(index) }
+            }
+            HomePageContent(
+                uiState = uiState,
+                page = uiState.pages[index - CURRENT_PAGE],
+                listState = listState,
+                topPadding = topInset + headerHeight,
+                selectionStrength = selectionStrength,
+                onCalendarSelect = onCalendarSelect,
+                onGroupSelect = onGroupSelect,
+                onClearSelection = onClearSelection,
+                onPrevious = { onPageChange(uiState.pageOffset - 1) },
+                onNext = { onPageChange(uiState.pageOffset + 1) },
+                animateIntro = !introPlayed,
+            )
+        }
+        // Keeps the status bar clear of content scrolling below it
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(topInset)
+                .background(MaterialTheme.colorScheme.surface),
+        )
+        FloatingHeader(
+            floating = scrolled,
+            modifier = Modifier
+                .padding(top = topInset)
+                .onSizeChanged { headerHeight = with(density) { it.height.toDp() } },
+        ) {
+            ShortcutSelector(
+                shortcuts = uiState.shortcuts,
+                selected = uiState.selectedShortcut,
+                onSelect = onShortcutSelect,
+            )
+        }
+    }
+}
+
+/**
+ * Lies flat on the page until [floating]; then it lifts off with a shadow and turns into a pill
+ * with some space to the sides. Its own size never changes, so the content below stays put.
+ */
+@Composable
+private fun FloatingHeader(floating: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val progress by animateFloatAsState(if (floating) 1f else 0f, label = "header float")
+    val colors = MaterialTheme.colorScheme
+    Box(modifier.fillMaxWidth().height(HEADER_HEIGHT)) {
+        Surface(
+            shape = RoundedCornerShape(percent = (50 * progress).roundToInt()),
+            color = lerp(colors.surface, colors.surfaceContainer, progress),
+            shadowElevation = 6.dp * progress,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp * progress, vertical = 4.dp * progress),
+        ) {
+            Box(contentAlignment = Alignment.CenterStart) { content() }
+        }
+    }
+}
+
+private val HEADER_HEIGHT = 56.dp
+
+@Composable
+private fun HomePageContent(
+    uiState: HomeUiState,
+    page: HomePage?,
+    listState: LazyListState,
+    topPadding: Dp,
+    selectionStrength: Float,
+    onCalendarSelect: (Long?) -> Unit,
+    onGroupSelect: (Long) -> Unit,
+    onClearSelection: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    animateIntro: Boolean,
+) {
+    // A page further away than the loaded neighbours stays empty until it is loaded
+    if (page == null) {
+        Box(Modifier.fillMaxSize())
+        return
+    }
+    val selectedCalendar = page.calendar(uiState.selectedCalendarId)
+    val selectedGroup = uiState.selectedGroup
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = topPadding + 8.dp,
+            bottom = LocalBottomNavBarHeight.current + 16.dp,
+        ),
+    ) {
+        val unit = uiState.unit
+        val today = uiState.today
+        if (unit != null && today != null && page.firstDay != null) {
+            item(key = "navigator") {
+                PageNavigator(
+                    label = rememberPageLabel(unit, page.firstDay, today),
+                    canGoNext = page.offset < 0,
+                    onPrevious = onPrevious,
+                    onNext = onNext,
+                )
+            }
+        }
+        item(key = "ring") {
+            CalendarRing(
+                page = page,
+                groups = uiState.groups,
+                selectedCalendar = selectedCalendar,
+                selectedGroup = selectedGroup,
+                selectionStrength = selectionStrength,
+                onCalendarSelect = onCalendarSelect,
+                onGroupSelect = onGroupSelect,
+                onClearSelection = onClearSelection,
+                animateIntro = animateIntro,
+            )
+        }
+        item(key = "events title") {
+            val selectedName = selectedCalendar?.name ?: selectedGroup?.name
+            Text(
+                text = selectedName
+                    ?.let { stringResource(R.string.home_events_of_calendar, it) }
+                    ?: stringResource(R.string.home_events),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp),
+            )
+        }
+        if (page.events.isEmpty()) {
+            item(key = "no events") {
+                Text(
+                    text = stringResource(R.string.home_no_events),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+        }
+        val eventsByDay = page.events.groupBy { it.date }
+        eventsByDay.forEach { (date, events) ->
+            if (eventsByDay.size > 1) {
+                item(key = "day-$date") { DayHeader(date, Modifier.animateItem()) }
+            }
+            items(events, key = { "${it.eventId}-${it.start.toEpochMilliseconds()}" }) { event ->
+                EventRow(event, Modifier.animateItem())
+            }
+        }
+    }
+}
+
+/** A quiet bar naming the page, with buttons to the previous and next one. */
+@Composable
+private fun PageNavigator(
+    label: PageLabel,
+    canGoNext: Boolean,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+    ) {
+        IconButton(onClick = onPrevious) {
+            Icon(
+                imageVector = PhIcons.Regular.CaretLeft,
+                contentDescription = stringResource(R.string.home_page_previous),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .weight(1f)
+                .testTag(HomeTestTags.PAGE_LABEL)
+                .semantics(mergeDescendants = true) {},
+        ) {
+            Text(
+                text = label.title,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+            )
+            label.subtitle?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+        }
+        IconButton(onClick = onNext, enabled = canGoNext) {
+            Icon(
+                imageVector = PhIcons.Regular.CaretRight,
+                contentDescription = stringResource(R.string.home_page_next),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (canGoNext) 1f else 0.38f),
+                modifier = Modifier.size(20.dp),
             )
         }
     }
@@ -243,15 +491,6 @@ private fun LastSyncHint(lastSync: Instant?, modifier: Modifier = Modifier) {
 }
 
 private const val LAST_SYNC_HINT_MILLIS = 3_000L
-
-@Composable
-private fun Header(uiState: HomeUiState, onShortcutSelect: (RangeShortcut) -> Unit) {
-    ShortcutSelector(
-        shortcuts = uiState.shortcuts,
-        selected = uiState.selectedShortcut,
-        onSelect = onShortcutSelect,
-    )
-}
 
 /** The shortcuts side by side, scrollable, on one baseline. */
 @Composable
@@ -340,17 +579,19 @@ private data class CenterLabel(val key: String, val name: String?, val color: Co
 
 @Composable
 private fun CalendarRing(
-    uiState: HomeUiState,
-    calendars: List<CalendarTime>,
+    page: HomePage,
+    groups: List<GroupInfo>,
+    selectedCalendar: CalendarTime?,
+    selectedGroup: GroupInfo?,
     selectionStrength: Float,
     onCalendarSelect: (Long?) -> Unit,
     onGroupSelect: (Long) -> Unit,
     onClearSelection: () -> Unit,
+    animateIntro: Boolean,
 ) {
     val groupColor = { group: GroupInfo -> group.color?.let(::Color) }
     val outline = MaterialTheme.colorScheme.outline
-    val selectedCalendar = uiState.selectedCalendar
-    val selectedGroup = uiState.selectedGroup
+    val hasSelection = selectedCalendar != null || selectedGroup != null
     val label = when {
         selectedCalendar != null -> CenterLabel(
             key = "calendar-${selectedCalendar.calendarId}",
@@ -362,13 +603,13 @@ private fun CalendarRing(
             key = "group-${selectedGroup.id}",
             name = selectedGroup.name,
             color = groupColor(selectedGroup) ?: MaterialTheme.colorScheme.onSurface,
-            duration = uiState.groupDuration(selectedGroup.id),
+            duration = page.groupDuration(selectedGroup.id),
         )
-        else -> CenterLabel(key = "total", name = null, color = null, duration = uiState.totalDuration)
+        else -> CenterLabel(key = "total", name = null, color = null, duration = page.totalDuration)
     }
     Box(Modifier.fillMaxWidth().padding(top = 16.dp), contentAlignment = Alignment.Center) {
         DonutChart(
-            slices = calendars.map {
+            slices = page.calendars.map {
                 DonutSlice(
                     id = it.calendarId,
                     value = it.duration.inWholeSeconds.toFloat(),
@@ -376,15 +617,16 @@ private fun CalendarRing(
                     groupId = it.groupId,
                 )
             },
-            groups = uiState.groups.map { group -> DonutGroup(group.id, groupColor(group) ?: outline) },
+            groups = groups.map { group -> DonutGroup(group.id, groupColor(group) ?: outline) },
             selectedId = selectedCalendar?.calendarId,
             selectedGroupId = selectedGroup?.id,
             onGroupClick = onGroupSelect,
             selectionStrength = selectionStrength,
             // Unfold once the splash screen is gone, not hidden behind it
             playIntro = LocalAppStartState.current.splashDismissed.collectAsStateWithLifecycle().value,
+            animateIntro = animateIntro,
             // A tap beside the ring clears the selection
-            onSliceClick = { id -> if (id != null) onCalendarSelect(id) else if (uiState.hasSelection) onClearSelection() },
+            onSliceClick = { id -> if (id != null) onCalendarSelect(id) else if (hasSelection) onClearSelection() },
             modifier = Modifier.size(260.dp).testTag(HomeTestTags.RING),
         ) {
             Column(
@@ -537,24 +779,35 @@ private const val EVENT_MAX_HEIGHT_DP = 160f
 @Composable
 private fun HomeContentPreview() {
     val now = Instant.parse("2026-11-12T15:00:00Z")
+    val today = LocalDate(2026, 11, 12)
     ClockMeTheme(dynamicColor = false) {
         HomeContent(
             uiState = HomeUiState(
-                shortcuts = RangeShortcut.available(LocalDate(2026, 11, 12)),
-                calendars = listOf(
-                    CalendarTime(1, "Work", 0xFF4285F4.toInt(), 150.minutes),
-                    CalendarTime(2, "Personal", 0xFF0B8043.toInt(), 45.minutes),
-                ),
-                selectedCalendarId = null,
-                events = listOf(
-                    EventItem(1, 1, LocalDate(2026, 11, 12), "Standup", 0xFF4285F4.toInt(), now - 60.minutes, now + 30.minutes, 60.minutes, true),
-                    EventItem(2, 2, LocalDate(2026, 11, 12), "Gym", 0xFF0B8043.toInt(), now - 300.minutes, now - 255.minutes, 45.minutes, false),
+                shortcuts = RangeShortcut.available(today),
+                today = today,
+                unit = PageUnit.DAY,
+                hasActiveCalendars = true,
+                pages = mapOf(
+                    0 to HomePage(
+                        offset = 0,
+                        firstDay = today,
+                        range = ResolvedTimeRange(now - 900.minutes, now),
+                        calendars = listOf(
+                            CalendarTime(1, "Work", 0xFF4285F4.toInt(), 150.minutes),
+                            CalendarTime(2, "Personal", 0xFF0B8043.toInt(), 45.minutes),
+                        ),
+                        events = listOf(
+                            EventItem(1, 1, today, "Standup", 0xFF4285F4.toInt(), now - 60.minutes, now + 30.minutes, 60.minutes, true),
+                            EventItem(2, 2, today, "Gym", 0xFF0B8043.toInt(), now - 300.minutes, now - 255.minutes, 45.minutes, false),
+                        ),
+                    ),
                 ),
             ),
             onCalendarSelect = {},
             onGroupSelect = {},
             onClearSelection = {},
             onShortcutSelect = {},
+            onPageChange = {},
         )
     }
 }

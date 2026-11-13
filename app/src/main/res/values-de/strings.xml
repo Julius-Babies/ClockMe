@@ -20,6 +20,9 @@
     <string name="home_shortcut_this_month">Dieser Monat</string>
     <string name="home_shortcut_last_month">Letzter Monat</string>
     <string name="home_shortcut_all">Gesamt</string>
+    <string name="home_page_week">KW %1$d</string>
+    <string name="home_page_previous">Zurück</string>
+    <string name="home_page_next">Weiter</string>
     <string name="home_total">Gesamt</string>
     <string name="home_events">Termine</string>
     <string name="home_events_of_calendar">Termine · %1$s</string>
