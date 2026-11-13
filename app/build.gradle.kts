@@ -58,8 +58,9 @@ android {
         release {
             signingConfig = signingConfigs.findByName("default")
             optimization {
+                // Whole app: limiting R8 to library packages (packageScope) made Kotlin stdlib
+                // classes inaccessible to app classes extending them (IllegalAccessError on start)
                 enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
             }
         }
     }
