@@ -18,7 +18,9 @@
     <string name="home_shortcut_today">Today</string>
     <string name="home_shortcut_yesterday">Yesterday</string>
     <string name="home_shortcut_this_week">This week</string>
+    <string name="home_shortcut_last_week">Last week</string>
     <string name="home_shortcut_this_month">This month</string>
+    <string name="home_shortcut_last_month">Last month</string>
     <string name="home_shortcut_all">All time</string>
     <string name="home_total">Total</string>
     <string name="home_events">Events</string>

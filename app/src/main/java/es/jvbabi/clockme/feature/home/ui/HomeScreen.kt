@@ -329,7 +329,9 @@ private val RangeShortcut.label: Int
         RangeShortcut.TODAY -> R.string.home_shortcut_today
         RangeShortcut.YESTERDAY -> R.string.home_shortcut_yesterday
         RangeShortcut.THIS_WEEK -> R.string.home_shortcut_this_week
+        RangeShortcut.LAST_WEEK -> R.string.home_shortcut_last_week
         RangeShortcut.THIS_MONTH -> R.string.home_shortcut_this_month
+        RangeShortcut.LAST_MONTH -> R.string.home_shortcut_last_month
         RangeShortcut.ALL -> R.string.home_shortcut_all
     }
 
@@ -538,7 +540,7 @@ private fun HomeContentPreview() {
     ClockMeTheme(dynamicColor = false) {
         HomeContent(
             uiState = HomeUiState(
-                shortcuts = RangeShortcut.entries,
+                shortcuts = RangeShortcut.available(LocalDate(2026, 11, 12)),
                 calendars = listOf(
                     CalendarTime(1, "Work", 0xFF4285F4.toInt(), 150.minutes),
                     CalendarTime(2, "Personal", 0xFF0B8043.toInt(), 45.minutes),

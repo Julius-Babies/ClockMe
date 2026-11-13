@@ -147,7 +147,7 @@ class HomeViewModelTest {
     @Test
     fun shortcutsAreOfferedAndSelectable() = runTest {
         val (viewModel, _) = viewModelWithEvents()
-        assertEquals(RangeShortcut.entries, viewModel.uiState.value.shortcuts)
+        assertEquals(RangeShortcut.available(today), viewModel.uiState.value.shortcuts)
         assertEquals(RangeShortcut.TODAY, viewModel.uiState.value.selectedShortcut)
 
         viewModel.onShortcutSelect(RangeShortcut.YESTERDAY)

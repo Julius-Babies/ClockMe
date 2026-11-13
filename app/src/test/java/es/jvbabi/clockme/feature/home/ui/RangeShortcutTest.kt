@@ -28,23 +28,37 @@ class RangeShortcutTest {
     }
 
     @Test
-    fun allShortcutsAreAvailableMidWeekAndMidMonth() {
-        assertEquals(RangeShortcut.entries, RangeShortcut.available(today))
+    fun pastWeekAndMonthAreTheWholePreviousOnes() {
+        assertEquals(TimeRangeFilter(startOf("2026-11-02"), startOf("2026-11-09")), RangeShortcut.LAST_WEEK.toFilter(today, berlin))
+        assertEquals(TimeRangeFilter(startOf("2026-10-01"), startOf("2026-11-01")), RangeShortcut.LAST_MONTH.toFilter(today, berlin))
+        // Across the turn of the year
+        assertEquals(
+            TimeRangeFilter(startOf("2026-12-01"), startOf("2027-01-01")),
+            RangeShortcut.LAST_MONTH.toFilter(LocalDate.parse("2027-01-01"), berlin),
+        )
     }
 
     @Test
-    fun thisWeekIsLeftOutOnMondays() {
+    fun thisWeekAndThisMonthMidWeekAndMidMonth() {
         assertEquals(
-            listOf(RangeShortcut.TODAY, RangeShortcut.YESTERDAY, RangeShortcut.THIS_MONTH, RangeShortcut.ALL),
+            listOf(RangeShortcut.TODAY, RangeShortcut.YESTERDAY, RangeShortcut.THIS_WEEK, RangeShortcut.THIS_MONTH, RangeShortcut.ALL),
+            RangeShortcut.available(today),
+        )
+    }
+
+    @Test
+    fun lastWeekReplacesThisWeekOnMondays() {
+        assertEquals(
+            listOf(RangeShortcut.TODAY, RangeShortcut.YESTERDAY, RangeShortcut.LAST_WEEK, RangeShortcut.THIS_MONTH, RangeShortcut.ALL),
             RangeShortcut.available(LocalDate.parse("2026-11-09")),
         )
     }
 
     @Test
-    fun thisMonthIsLeftOutOnTheFirst() {
+    fun lastMonthReplacesThisMonthOnTheFirst() {
         // A Sunday
         assertEquals(
-            listOf(RangeShortcut.TODAY, RangeShortcut.YESTERDAY, RangeShortcut.THIS_WEEK, RangeShortcut.ALL),
+            listOf(RangeShortcut.TODAY, RangeShortcut.YESTERDAY, RangeShortcut.THIS_WEEK, RangeShortcut.LAST_MONTH, RangeShortcut.ALL),
             RangeShortcut.available(LocalDate.parse("2026-11-01")),
         )
     }
