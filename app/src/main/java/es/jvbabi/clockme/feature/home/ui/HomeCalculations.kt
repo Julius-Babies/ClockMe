@@ -60,16 +60,19 @@ fun groupInfos(groups: List<CalendarGroup>, calendars: List<CalendarTime>): List
     return groups.filter { it.id in usedGroupIds }.map { GroupInfo(it.id, it.name, it.color) }
 }
 
-/** Events within [range] in chronological order, like a calendar; only of [calendarId] unless it is `null`. */
+/**
+ * Events within [range] in chronological order, like a calendar; only of [calendarIds] unless it
+ * is `null`.
+ */
 fun eventItems(
     activeAccounts: List<CalendarAccount>,
     segments: List<EventSegment>,
     range: ResolvedTimeRange,
-    calendarId: Long?,
+    calendarIds: Set<Long>?,
 ): List<EventItem> {
     val colors = activeAccounts.flatMap { it.calendars }.associate { it.id to it.color }
     return segments
-        .filter { calendarId == null || it.calendarId == calendarId }
+        .filter { calendarIds == null || it.calendarId in calendarIds }
         .mapNotNull { segment ->
             val color = colors[segment.calendarId] ?: return@mapNotNull null
             val clipped = segment.clipTo(range.from, range.to) ?: return@mapNotNull null

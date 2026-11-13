@@ -33,6 +33,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
@@ -48,7 +49,7 @@ data class DonutSlice(
     val groupId: Long? = null,
 )
 
-/** A band drawn outside the ring around the slices of the group. */
+/** A band drawn just outside the ring around the slices of the group; it is clickable too. */
 data class DonutGroup(
     val id: Long,
     val color: Color,
@@ -65,9 +66,16 @@ private const val GAP_DEGREES = 2f
 /** Alpha of the slices that are not selected while one is. */
 private const val DIMMED_ALPHA = 0.3f
 
+/** A selected group's band gets this much wider. */
+private const val SELECTED_BAND_SCALE = 1.6f
+
 /**
  * A ring chart. Slices are clickable: [onSliceClick] gets the slice's id, or `null` for a tap
  * beside the ring. The [selectedId] slice grows outwards, the others fade.
+ *
+ * [groups] get a band around their slices that hugs the ring and moves out with grown slices.
+ * Tapping a band, or the space around it, reports the group to [onGroupClick]. The slices of the
+ * [selectedGroupId] grow like a selected slice and its band widens.
  *
  * It unfolds clockwise once it is shown while turning into place, and animates any change
  * of the values. [centerContent] is not
@@ -87,8 +95,12 @@ fun DonutChart(
     /** The ring stays hidden until this is true, then unfolds; e.g. to wait for a splash screen. */
     playIntro: Boolean = true,
     groups: List<DonutGroup> = emptyList(),
+    selectedGroupId: Long? = null,
+    onGroupClick: (Long) -> Unit = {},
     groupBandWidth: Dp = 5.dp,
-    groupBandGap: Dp = 4.dp,
+    groupBandGap: Dp = 3.dp,
+    /** Room outside the bands that still counts as a tap on them. */
+    groupTouchPadding: Dp = 8.dp,
     centerContent: @Composable () -> Unit = {},
 ) {
     val intro = remember { Animatable(0f) }
@@ -119,21 +131,41 @@ fun DonutChart(
 
     val selection = ids.associateWith { id ->
         key(id) {
-            val selected by animateFloatAsState(if (id == selectedId) 1f else 0f, label = "selection")
+            val highlighted = id == selectedId || (selectedGroupId != null && groupOfSlice[id] == selectedGroupId)
+            val selected by animateFloatAsState(if (highlighted) 1f else 0f, label = "selection")
             val alpha by animateFloatAsState(
-                if (selectedId == null || id == selectedId) 1f else DIMMED_ALPHA,
+                if ((selectedId == null && selectedGroupId == null) || highlighted) 1f else DIMMED_ALPHA,
                 label = "alpha",
             )
             selected to alpha
         }
     }
+    val groupIds = (groups.map { it.id } + groupOfSlice.values).distinct()
+    val groupSelection = groupIds.associateWith { id ->
+        key(id) {
+            animateFloatAsState(if (id == selectedGroupId) 1f else 0f, label = "group selection").value
+        }
+    }
 
     val haptics = LocalHapticFeedback.current
     val currentOnSliceClick by rememberUpdatedState(onSliceClick)
+    val currentOnGroupClick by rememberUpdatedState(onGroupClick)
     val currentIds by rememberUpdatedState(ids)
     val currentValues by rememberUpdatedState(values)
     val currentIsEmpty by rememberUpdatedState(isEmpty)
     val currentHasGroups by rememberUpdatedState(hasGroups)
+    val currentGroupOfSlice by rememberUpdatedState(groupOfSlice)
+    val currentSelection by rememberUpdatedState(selection)
+
+    fun Density.geometry(width: Float, height: Float, withGroups: Boolean) = RingGeometry(
+        width,
+        height,
+        strokeWidth.toPx(),
+        selectedExtraWidth.toPx(),
+        band = if (withGroups) groupBandWidth.toPx() else 0f,
+        bandGap = if (withGroups) groupBandGap.toPx() else 0f,
+        touchPadding = if (withGroups) groupTouchPadding.toPx() else 0f,
+    )
 
     Box(modifier, contentAlignment = Alignment.Center) {
         Canvas(
@@ -141,32 +173,27 @@ fun DonutChart(
                 .fillMaxSize()
                 .pointerInput(Unit) {
                     detectTapGestures { tap ->
-                        val geometry = RingGeometry(
-                            size.width.toFloat(),
-                            size.height.toFloat(),
-                            strokeWidth.toPx(),
-                            selectedExtraWidth.toPx(),
-                            band = if (currentHasGroups) groupBandWidth.toPx() else 0f,
-                            bandGap = if (currentHasGroups) groupBandGap.toPx() else 0f,
-                        )
-                        val id = if (currentIsEmpty) {
+                        val geometry = geometry(size.width.toFloat(), size.height.toFloat(), currentHasGroups)
+                        val hit = if (currentIsEmpty) {
                             null
                         } else {
-                            geometry.sliceAt(tap, currentIds.map { it to (currentValues[it] ?: 0f) })
+                            geometry.hitAt(
+                                point = tap,
+                                slices = currentIds.map { it to (currentValues[it] ?: 0f) },
+                                groupOf = currentGroupOfSlice,
+                                selectedOf = { currentSelection[it]?.first ?: 0f },
+                            )
                         }
-                        if (id != null) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                        currentOnSliceClick(id)
+                        if (hit != null) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                        when (hit) {
+                            is RingHit.Group -> currentOnGroupClick(hit.id)
+                            is RingHit.Slice -> currentOnSliceClick(hit.id)
+                            null -> currentOnSliceClick(null)
+                        }
                     }
                 },
         ) {
-            val geometry = RingGeometry(
-                size.width,
-                size.height,
-                strokeWidth.toPx(),
-                selectedExtraWidth.toPx(),
-                band = if (hasGroups) groupBandWidth.toPx() else 0f,
-                bandGap = if (hasGroups) groupBandGap.toPx() else 0f,
-            )
+            val geometry = geometry(size.width, size.height, hasGroups)
             // While unfolding the ring also grows from its outer edge inwards
             val stroke = geometry.stroke * intro.value
             val ringRadius = geometry.outerEdge - stroke / 2f
@@ -191,7 +218,10 @@ fun DonutChart(
                 var angle = -90f
                 // Start and end angle of each group, for the bands
                 val groupArcs = linkedMapOf<Long, Pair<Float, Float>>()
-                val selectedGroup = selectedId?.let { groupOfSlice[it] }
+                // How far the grown slices of a group push its band out
+                val groupPush = mutableMapOf<Long, Float>()
+                val highlightedGroup = selectedGroupId ?: selectedId?.let { groupOfSlice[it] }
+                val hasSelection = selectedId != null || selectedGroupId != null
                 ids.forEach { id ->
                     val value = values[id] ?: 0f
                     if (value <= 0f) return@forEach
@@ -214,16 +244,19 @@ fun DonutChart(
                     groupOfSlice[id]?.let { groupId ->
                         val (start, _) = groupArcs[groupId] ?: (angle to angle)
                         groupArcs[groupId] = start to angle + sweep
+                        groupPush[groupId] = maxOf(groupPush[groupId] ?: 0f, selected)
                     }
                     angle += sweep
                 }
 
-                val band = geometry.band * intro.value
-                val bandRadius = geometry.bandOuterEdge - band / 2f
                 groupArcs.forEach { (groupId, arc) ->
                     val (start, end) = arc
-                    // Fades with the slices when a slice of another group is selected
-                    val dimmed = selectedId != null && selectedGroup != groupId
+                    val scale = lerp(1f, SELECTED_BAND_SCALE, (groupSelection[groupId] ?: 0f) * selectionStrength)
+                    val band = geometry.band * scale * intro.value
+                    // Hugs the ring from its outer edge, even while the ring grows in the intro
+                    val bandRadius = geometry.bandInnerEdge(groupPush[groupId] ?: 0f) + band / 2f
+                    // Fades with the slices when something outside the group is selected
+                    val dimmed = hasSelection && highlightedGroup != groupId
                     val alpha = if (dimmed) lerp(1f, DIMMED_ALPHA, selectionStrength) else 1f
                     drawArc(
                         color = (groupColors[groupId] ?: Color.Gray).copy(alpha = alpha),
@@ -287,34 +320,67 @@ private fun rememberColors(slices: List<DonutSlice>): Map<Long, Color> {
     return colors
 }
 
+private sealed interface RingHit {
+    data class Slice(val id: Long) : RingHit
+    data class Group(val id: Long) : RingHit
+}
+
 private class RingGeometry(
     width: Float,
     height: Float,
     val stroke: Float,
     val extra: Float,
     val band: Float = 0f,
-    bandGap: Float = 0f,
+    private val bandGap: Float = 0f,
+    touchPadding: Float = 0f,
 ) {
     val center = Offset(width / 2f, height / 2f)
 
-    /** Radius of the middle of the ring; leaves room for a selected slice and group bands. */
-    val radius = (minOf(width, height) - stroke - 2f * extra - 2f * (bandGap + band)) / 2f
+    /** Taps in the corners outside the circle hit nothing. */
+    private val maxRadius = minOf(width, height) / 2f
+
+    /**
+     * Radius of the middle of the ring; leaves room for a selected slice, the group bands pushed
+     * out by it and the touch area around them.
+     */
+    val radius = (minOf(width, height) - stroke - 2f * (extra + bandGap + band * SELECTED_BAND_SCALE + touchPadding)) / 2f
 
     val outerEdge = radius + stroke / 2f
 
-    /** Group bands lie outside a fully grown selected slice. */
-    val bandOuterEdge = outerEdge + extra + bandGap + band
+    /** A group's band lies just outside the ring, pushed out as far as its slices have grown ([push] 0..1). */
+    fun bandInnerEdge(push: Float) = outerEdge + bandGap + extra * push
 
-    /** The slice at [point], `null` if it is not on the ring. Assumes the intro has finished. */
-    fun sliceAt(point: Offset, slices: List<Pair<Long, Float>>): Long? {
+    /**
+     * What is at [point], `null` if neither a slice nor a band. Assumes the intro has finished.
+     * Outside the ring, a group's band takes everything up to the edge of the chart; between a
+     * slice and its band the area is split in the middle.
+     */
+    fun hitAt(
+        point: Offset,
+        slices: List<Pair<Long, Float>>,
+        groupOf: Map<Long, Long>,
+        selectedOf: (Long) -> Float,
+    ): RingHit? {
         val dx = point.x - center.x
         val dy = point.y - center.y
         val distance = hypot(dx, dy)
-        if (distance < radius - stroke / 2f || distance > radius + stroke / 2f + extra) return null
+        if (distance < radius - stroke / 2f || distance > maxRadius) return null
+        val id = sliceAtAngle(dx, dy, slices) ?: return null
+        val sliceOuterEdge = outerEdge + extra * selectedOf(id)
 
+        val groupId = groupOf[id]?.takeIf { band > 0f }
+        if (groupId != null) {
+            val push = slices.filter { groupOf[it.first] == groupId }.maxOf { selectedOf(it.first) }
+            val boundary = (sliceOuterEdge + bandInnerEdge(push)) / 2f
+            return if (distance >= boundary) RingHit.Group(groupId) else RingHit.Slice(id)
+        }
+        return if (distance <= outerEdge + extra) RingHit.Slice(id) else null
+    }
+
+    /** The slice in the direction of ([dx], [dy]) from the center, clockwise from the top like they are drawn. */
+    private fun sliceAtAngle(dx: Float, dy: Float, slices: List<Pair<Long, Float>>): Long? {
         val total = slices.sumOf { it.second.toDouble() }.toFloat()
         if (total <= 0f) return null
-        // Clockwise from the top, like the slices are drawn
         val angle = (Math.toDegrees(atan2(dx, -dy).toDouble()).toFloat() + 360f) % 360f
         var end = 0f
         slices.forEach { (id, value) ->

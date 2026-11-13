@@ -100,6 +100,7 @@ fun HomeScreen(
     HomeContent(
         uiState = uiState,
         onCalendarSelect = viewModel::onCalendarSelect,
+        onGroupSelect = viewModel::onGroupSelect,
         onClearSelection = viewModel::onClearSelection,
         onShortcutSelect = viewModel::onShortcutSelect,
     )
@@ -114,13 +115,14 @@ object HomeTestTags {
 internal fun HomeContent(
     uiState: HomeUiState,
     onCalendarSelect: (Long?) -> Unit,
+    onGroupSelect: (Long) -> Unit,
     onClearSelection: () -> Unit,
     onShortcutSelect: (RangeShortcut) -> Unit,
 ) {
     // 0 while no back gesture is running, up to 1 while the user swipes back
     var backProgress by remember { mutableFloatStateOf(0f) }
     // Back only clears the selection; without one it is left to the navigation
-    PredictiveBackHandler(enabled = uiState.selectedCalendarId != null) { events ->
+    PredictiveBackHandler(enabled = uiState.hasSelection) { events ->
         try {
             events.collect { backProgress = it.progress }
             onClearSelection()
@@ -158,18 +160,19 @@ internal fun HomeContent(
                     item { Header(uiState, onShortcutSelect) }
                     item {
                         CalendarRing(
+                            uiState = uiState,
                             calendars = calendars,
-                            groups = uiState.groups,
-                            selected = uiState.selectedCalendar,
-                            totalDuration = uiState.totalDuration,
                             selectionStrength = 1f - backProgress,
                             onCalendarSelect = onCalendarSelect,
+                            onGroupSelect = onGroupSelect,
+                            onClearSelection = onClearSelection,
                         )
                     }
                     item {
+                        val selectedName = uiState.selectedCalendar?.name ?: uiState.selectedGroup?.name
                         Text(
-                            text = uiState.selectedCalendar
-                                ?.let { stringResource(R.string.home_events_of_calendar, it.name) }
+                            text = selectedName
+                                ?.let { stringResource(R.string.home_events_of_calendar, it) }
                                 ?: stringResource(R.string.home_events),
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp),
@@ -330,15 +333,37 @@ private val RangeShortcut.label: Int
         RangeShortcut.ALL -> R.string.home_shortcut_all
     }
 
+/** What the center of the ring shows: the selected calendar or group, or the total. */
+private data class CenterLabel(val key: String, val name: String?, val color: Color?, val duration: Duration)
+
 @Composable
 private fun CalendarRing(
+    uiState: HomeUiState,
     calendars: List<CalendarTime>,
-    groups: List<GroupInfo>,
-    selected: CalendarTime?,
-    totalDuration: Duration,
     selectionStrength: Float,
     onCalendarSelect: (Long?) -> Unit,
+    onGroupSelect: (Long) -> Unit,
+    onClearSelection: () -> Unit,
 ) {
+    val groupColor = { group: GroupInfo -> group.color?.let(::Color) }
+    val outline = MaterialTheme.colorScheme.outline
+    val selectedCalendar = uiState.selectedCalendar
+    val selectedGroup = uiState.selectedGroup
+    val label = when {
+        selectedCalendar != null -> CenterLabel(
+            key = "calendar-${selectedCalendar.calendarId}",
+            name = selectedCalendar.name,
+            color = Color(selectedCalendar.color),
+            duration = selectedCalendar.duration,
+        )
+        selectedGroup != null -> CenterLabel(
+            key = "group-${selectedGroup.id}",
+            name = selectedGroup.name,
+            color = groupColor(selectedGroup) ?: MaterialTheme.colorScheme.onSurface,
+            duration = uiState.groupDuration(selectedGroup.id),
+        )
+        else -> CenterLabel(key = "total", name = null, color = null, duration = uiState.totalDuration)
+    }
     Box(Modifier.fillMaxWidth().padding(top = 16.dp), contentAlignment = Alignment.Center) {
         DonutChart(
             slices = calendars.map {
@@ -349,14 +374,15 @@ private fun CalendarRing(
                     groupId = it.groupId,
                 )
             },
-            groups = groups.map { group ->
-                DonutGroup(group.id, group.color?.let(::Color) ?: MaterialTheme.colorScheme.outline)
-            },
-            selectedId = selected?.calendarId,
+            groups = uiState.groups.map { group -> DonutGroup(group.id, groupColor(group) ?: outline) },
+            selectedId = selectedCalendar?.calendarId,
+            selectedGroupId = selectedGroup?.id,
+            onGroupClick = onGroupSelect,
             selectionStrength = selectionStrength,
             // Unfold once the splash screen is gone, not hidden behind it
             playIntro = LocalAppStartState.current.splashDismissed.collectAsStateWithLifecycle().value,
-            onSliceClick = { id -> onCalendarSelect(id ?: selected?.calendarId) },
+            // A tap beside the ring clears the selection
+            onSliceClick = { id -> if (id != null) onCalendarSelect(id) else if (uiState.hasSelection) onClearSelection() },
             modifier = Modifier.size(260.dp).testTag(HomeTestTags.RING),
         ) {
             Column(
@@ -365,29 +391,29 @@ private fun CalendarRing(
             ) {
                 // Fixed width, so names of different lengths don't make it jump sideways
                 AnimatedContent(
-                    targetState = selected,
+                    targetState = label,
                     transitionSpec = {
                         (slideInVertically { it / 2 } + fadeIn()) togetherWith
                             (slideOutVertically { -it / 2 } + fadeOut()) using
                             SizeTransform(clip = false) { _, _ -> snap() }
                     },
-                    contentKey = { it?.calendarId },
+                    contentKey = { it.key },
                     contentAlignment = Alignment.Center,
                     modifier = Modifier.fillMaxWidth(),
                     label = "center label",
-                ) { calendar ->
+                ) { label ->
                     Text(
-                        text = calendar?.name ?: stringResource(R.string.home_total),
+                        text = label.name ?: stringResource(R.string.home_total),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                         style = MaterialTheme.typography.labelLarge,
-                        color = calendar?.let { Color(it.color) } ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = label.color ?: MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
                 RollingText(
-                    text = formatDuration(selected?.duration ?: totalDuration),
+                    text = formatDuration(label.duration),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -524,6 +550,7 @@ private fun HomeContentPreview() {
                 ),
             ),
             onCalendarSelect = {},
+            onGroupSelect = {},
             onClearSelection = {},
             onShortcutSelect = {},
         )

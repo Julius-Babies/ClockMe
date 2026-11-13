@@ -103,6 +103,37 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun selectingGroupFiltersEventsToItsCalendarsAndReplacesCalendarSelection() = runTest {
+        val groups = FakeCalendarGroupRepository()
+        val sport = groups.createGroup("Sport", color = null, calendarIds = setOf(gym.id))
+        val (viewModel, _) = viewModelWithEvents(groups)
+
+        viewModel.onCalendarSelect(work.id)
+        viewModel.onGroupSelect(sport)
+        assertEquals(sport, viewModel.uiState.value.selectedGroupId)
+        assertNull(viewModel.uiState.value.selectedCalendarId)
+        assertEquals(listOf(1L), viewModel.uiState.value.events.map { it.eventId })
+        assertEquals(30.minutes, viewModel.uiState.value.groupDuration(sport))
+
+        viewModel.onGroupSelect(sport)
+        assertNull(viewModel.uiState.value.selectedGroupId)
+        assertEquals(listOf(1L, 2L), viewModel.uiState.value.events.map { it.eventId })
+    }
+
+    @Test
+    fun groupSelectionIsDroppedWhenTheGroupIsDeleted() = runTest {
+        val groups = FakeCalendarGroupRepository()
+        val sport = groups.createGroup("Sport", color = null, calendarIds = setOf(gym.id))
+        val (viewModel, _) = viewModelWithEvents(groups)
+        viewModel.onGroupSelect(sport)
+
+        groups.deleteGroup(sport)
+
+        assertNull(viewModel.uiState.value.selectedGroupId)
+        assertEquals(listOf(1L, 2L), viewModel.uiState.value.events.map { it.eventId })
+    }
+
+    @Test
     fun filterIsUsed() = runTest {
         val (viewModel, _) = viewModelWithEvents()
 
@@ -161,7 +192,9 @@ class HomeViewModelTest {
     }
 
     /** Gym 11:30-12:00 (id 1), work from 14:00 (id 2, ongoing); now is 15:00. */
-    private suspend fun TestScope.viewModelWithEvents(): Pair<HomeViewModel, FakeTimeProvider> {
+    private suspend fun TestScope.viewModelWithEvents(
+        groupRepository: FakeCalendarGroupRepository = FakeCalendarGroupRepository(),
+    ): Pair<HomeViewModel, FakeTimeProvider> {
         val calendarRepository = FakeCalendarRepository()
         calendarRepository.setCalendarActive(account, work, active = true)
         calendarRepository.setCalendarActive(account, gym, active = true)
@@ -181,7 +214,7 @@ class HomeViewModelTest {
             calendarRepository,
             FakeKeyValueRepository(),
             timeProvider,
-            FakeCalendarGroupRepository(),
+            groupRepository,
         )
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         return viewModel to timeProvider

@@ -46,7 +46,12 @@ class HomeViewModel(
     /** A shortcut, or a custom filter if `null`. */
     private val selectedShortcut = MutableStateFlow<RangeShortcut?>(RangeShortcut.TODAY)
     private val customFilter = MutableStateFlow(TimeRangeFilter())
-    private val selectedCalendarId = MutableStateFlow<Long?>(null)
+    private val selection = MutableStateFlow<Selection?>(null)
+
+    private sealed interface Selection {
+        data class Calendar(val id: Long) : Selection
+        data class Group(val id: Long) : Selection
+    }
 
     private data class Range(
         val today: LocalDate,
@@ -85,15 +90,23 @@ class HomeViewModel(
         segments,
         combine(calendarRepository.observeActiveCalendars(), groupRepository.observeGroups(), ::Pair),
         combine(
-            selectedCalendarId,
+            selection,
             keyValueRepository.observeInstant(KeyValueKey.LAST_EVENT_SYNC),
             permissionRepository.observe(AppPermission.READ_CALENDAR),
             ::Triple,
         ),
-    ) { (today, shortcut, filter, range), segments, (activeAccounts, groups), (selectedId, lastEventSync, permission) ->
+    ) { (today, shortcut, filter, range), segments, (activeAccounts, groups), (selection, lastEventSync, permission) ->
         val calendars = calendarTimes(activeAccounts, segments, range, groups)
-        // Drop the selection if the calendar is gone
-        val selected = selectedId?.takeIf { id -> calendars.any { it.calendarId == id } }
+        // Drop the selection if the calendar or group is gone
+        val selectedCalendar = (selection as? Selection.Calendar)?.id
+            ?.takeIf { id -> calendars.any { it.calendarId == id } }
+        val selectedGroup = (selection as? Selection.Group)?.id
+            ?.takeIf { id -> calendars.any { it.groupId == id } }
+        val shownCalendarIds = when {
+            selectedCalendar != null -> setOf(selectedCalendar)
+            selectedGroup != null -> calendars.filter { it.groupId == selectedGroup }.map { it.calendarId }.toSet()
+            else -> null
+        }
         HomeUiState(
             shortcuts = RangeShortcut.available(today),
             selectedShortcut = shortcut,
@@ -101,8 +114,9 @@ class HomeViewModel(
             range = range,
             calendars = calendars,
             groups = groupInfos(groups, calendars),
-            selectedCalendarId = selected,
-            events = eventItems(activeAccounts, segments, range, selected),
+            selectedCalendarId = selectedCalendar,
+            selectedGroupId = selectedGroup,
+            events = eventItems(activeAccounts, segments, range, shownCalendarIds),
             lastEventSync = lastEventSync,
             hasCalendarPermission = permission == PermissionStatus.Granted,
         )
@@ -127,11 +141,18 @@ class HomeViewModel(
 
     /** Selects the calendar, or clears the selection if it is already selected or `null`. */
     fun onCalendarSelect(calendarId: Long?) {
-        selectedCalendarId.update { current -> if (calendarId == current) null else calendarId }
+        val new = calendarId?.let(Selection::Calendar)
+        selection.update { current -> if (new == current) null else new }
+    }
+
+    /** Selects the group instead of a calendar, or clears the selection if it is already selected. */
+    fun onGroupSelect(groupId: Long) {
+        val new = Selection.Group(groupId)
+        selection.update { current -> if (new == current) null else new }
     }
 
     fun onClearSelection() {
-        selectedCalendarId.value = null
+        selection.value = null
     }
 
     fun onShortcutSelect(shortcut: RangeShortcut) {

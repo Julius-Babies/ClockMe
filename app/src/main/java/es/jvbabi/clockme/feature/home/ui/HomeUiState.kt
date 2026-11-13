@@ -19,8 +19,10 @@ data class HomeUiState(
     val calendars: List<CalendarTime>? = null,
     /** Groups of the [calendars], in the same order. */
     val groups: List<GroupInfo> = emptyList(),
+    /** Either a calendar or a group is selected, never both. */
     val selectedCalendarId: Long? = null,
-    /** Events within [range], only of the selected calendar if there is one. */
+    val selectedGroupId: Long? = null,
+    /** Events within [range], only of the selected calendar or group if there is one. */
     val events: List<EventItem> = emptyList(),
     /** When the calendar events were last synced, `null` if never. */
     val lastEventSync: Instant? = null,
@@ -31,6 +33,14 @@ data class HomeUiState(
     val isReady: Boolean get() = calendars != null && hasCalendarPermission == true
 
     val selectedCalendar: CalendarTime? get() = calendars?.find { it.calendarId == selectedCalendarId }
+
+    val selectedGroup: GroupInfo? get() = groups.find { it.id == selectedGroupId }
+
+    val hasSelection: Boolean get() = selectedCalendarId != null || selectedGroupId != null
+
+    /** Sum of the calendars in the group. */
+    fun groupDuration(groupId: Long): Duration =
+        calendars.orEmpty().filter { it.groupId == groupId }.fold(Duration.ZERO) { sum, it -> sum + it.duration }
 
     /** Sum of all calendars, so it matches the ring. */
     val totalDuration: Duration get() = calendars.orEmpty().fold(Duration.ZERO) { sum, it -> sum + it.duration }

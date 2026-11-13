@@ -105,12 +105,12 @@ class HomeCalculationsTest {
             segment(work, 4, at("18:00"), at("19:00")),
         )
 
-        val all = eventItems(accounts, segments, range, calendarId = null)
+        val all = eventItems(accounts, segments, range, calendarIds = null)
         assertEquals(listOf(1L, 2L, 3L), all.map { it.eventId })
         assertEquals(listOf(false, false, true), all.map { it.isOngoing })
         assertEquals(listOf(60.minutes, 60.minutes, 30.minutes), all.map { it.duration })
 
-        assertEquals(listOf(1L, 3L), eventItems(accounts, segments, range, calendarId = work.id).map { it.eventId })
+        assertEquals(listOf(1L, 3L), eventItems(accounts, segments, range, calendarIds = setOf(work.id)).map { it.eventId })
     }
 
     @Test

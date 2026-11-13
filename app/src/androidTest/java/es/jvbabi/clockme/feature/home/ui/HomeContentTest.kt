@@ -51,6 +51,7 @@ class HomeContentTest {
     )
 
     private val selections = mutableListOf<Long?>()
+    private val groupSelections = mutableListOf<Long>()
     private var selectionsCleared = 0
     private val shortcuts = mutableListOf<RangeShortcut>()
 
@@ -60,6 +61,7 @@ class HomeContentTest {
                 HomeContent(
                     uiState = state,
                     onCalendarSelect = { selections += it },
+                    onGroupSelect = { groupSelections += it },
                     onClearSelection = { selectionsCleared++ },
                     onShortcutSelect = { shortcuts += it },
                 )
@@ -127,17 +129,60 @@ class HomeContentTest {
         tapRing(angleDegrees = 315f) // top left: gym
         tapRing(angleDegrees = null) // center: nothing
 
-        assertEquals(listOf<Long?>(work.calendarId, gym.calendarId, null), selections)
+        assertEquals(listOf<Long?>(work.calendarId, gym.calendarId), selections)
+        assertEquals(0, selectionsCleared)
     }
 
     @Test
-    fun tappingBesideTheRingKeepsTheSelectedCalendarSoItGetsDeselected() {
+    fun tappingBesideTheRingClearsTheSelection() {
         setContent(state.copy(selectedCalendarId = work.calendarId))
         compose.waitForIdle()
 
         tapRing(angleDegrees = null)
 
-        assertEquals(listOf<Long?>(work.calendarId), selections)
+        assertEquals(emptyList<Long?>(), selections)
+        assertEquals(1, selectionsCleared)
+    }
+
+    private val sport = GroupInfo(id = 7, name = "Sport", color = null)
+    private val groupedState = state.copy(
+        calendars = listOf(gym.copy(groupId = sport.id), work),
+        groups = listOf(sport),
+    )
+
+    @Test
+    fun tappingTheGroupBandOrNextToItSelectsTheGroup() {
+        setContent(groupedState)
+        compose.waitForIdle()
+
+        // Gym (grouped) covers the first quarter clockwise from the top, work the rest.
+        // With groups the ring of 260dp has radius (260 - 28 - 2 * (10 + 3 + 5 * 1.6 + 8)) / 2 = 87dp,
+        // its outer edge lies at 101dp and the band at 104-109dp.
+        tapRing(angleDegrees = 45f, radiusDp = 106f) // on the band
+        tapRing(angleDegrees = 45f, radiusDp = 114f) // just outside it
+        tapRing(angleDegrees = 45f, radiusDp = 87f) // the slice itself
+        tapRing(angleDegrees = 180f, radiusDp = 114f) // outside work, which has no group
+
+        assertEquals(listOf(sport.id, sport.id), groupSelections)
+        assertEquals(listOf<Long?>(gym.calendarId), selections)
+    }
+
+    @Test
+    fun showsSelectedGroupInTheCenterAndInTheListTitle() {
+        setContent(groupedState.copy(selectedGroupId = sport.id, events = listOf(workout)))
+
+        compose.onNodeWithText(sport.name).assertIsDisplayed()
+        compose.onNodeWithContentDescription(string(R.string.duration_minutes, 30)).assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.home_events_of_calendar, sport.name)).assertIsDisplayed()
+    }
+
+    @Test
+    fun backClearsTheGroupSelection() {
+        setContent(groupedState.copy(selectedGroupId = sport.id))
+
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+
+        assertEquals(1, selectionsCleared)
     }
 
     @Test
@@ -191,13 +236,13 @@ class HomeContentTest {
     }
 
     /** Taps the ring at [angleDegrees] clockwise from the top, or its center if `null`. */
-    private fun tapRing(angleDegrees: Float?) {
+    private fun tapRing(angleDegrees: Float?, radiusDp: Float = 106f) {
         compose.onNodeWithTag(HomeTestTags.RING).performTouchInput {
             val center = Offset(width / 2f, height / 2f)
             val position = if (angleDegrees == null) {
                 center
             } else {
-                val radius = 106.dp.toPx()
+                val radius = radiusDp.dp.toPx()
                 val radians = Math.toRadians(angleDegrees.toDouble())
                 Offset(
                     center.x + (radius * kotlin.math.sin(radians)).toFloat(),
