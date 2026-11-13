@@ -58,6 +58,8 @@ data class DonutGroup(
 /** Angle the ring starts at before it unfolds, it turns from there to 0°. */
 private const val INTRO_ROTATION_DEGREES = -30f
 private const val INTRO_MILLIS = 1_000
+
+private object IntroNotPlayed
 private const val CHANGE_MILLIS = 600
 
 /** Gap between two slices. */
@@ -96,6 +98,8 @@ fun DonutChart(
     playIntro: Boolean = true,
     /** `false` shows the ring right away without unfolding, e.g. for later pages of a pager. */
     animateIntro: Boolean = true,
+    /** The ring unfolds again whenever this changes, e.g. on a mode change. */
+    introKey: Any? = null,
     groups: List<DonutGroup> = emptyList(),
     selectedGroupId: Long? = null,
     onGroupClick: (Long) -> Unit = {},
@@ -106,8 +110,13 @@ fun DonutChart(
     centerContent: @Composable () -> Unit = {},
 ) {
     val intro = remember { Animatable(if (animateIntro) 0f else 1f) }
-    LaunchedEffect(playIntro) {
-        if (playIntro) intro.animateTo(1f, tween(INTRO_MILLIS, easing = EaseOutCubic))
+    // The key the intro was last played for; a ring shown without intro counts as played
+    var playedKey by remember { mutableStateOf<Any?>(if (animateIntro) IntroNotPlayed else introKey) }
+    LaunchedEffect(playIntro, introKey) {
+        if (!playIntro || playedKey == introKey) return@LaunchedEffect
+        playedKey = introKey
+        intro.snapTo(0f)
+        intro.animateTo(1f, tween(INTRO_MILLIS, easing = EaseOutCubic))
     }
 
     // Without any value the ring retracts and the empty track fades in; the slices keep their

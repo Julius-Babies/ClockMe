@@ -1,6 +1,8 @@
 package es.jvbabi.clockme.feature.home.ui
 
 import android.text.format.DateUtils
+import androidx.compose.foundation.interaction.DragInteraction
+import kotlinx.coroutines.flow.filterIsInstance
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
@@ -216,12 +218,12 @@ private fun HomePager(
 ) {
     val pagerState = rememberPagerState(initialPage = CURRENT_PAGE + uiState.pageOffset) { PAGE_COUNT }
 
-    // Follow the state: jump when the unit changes, slide to neighbouring pages otherwise
-    var shownUnit by remember { mutableStateOf(uiState.unit) }
-    LaunchedEffect(uiState.unit, uiState.pageOffset) {
+    // Follow the state: jump when the mode changes (the ring unfolds there), slide otherwise
+    var shownShortcut by remember { mutableStateOf(uiState.selectedShortcut) }
+    LaunchedEffect(uiState.selectedShortcut, uiState.pageOffset) {
         val target = CURRENT_PAGE + uiState.pageOffset
-        if (uiState.unit != shownUnit) {
-            shownUnit = uiState.unit
+        if (uiState.selectedShortcut != shownShortcut) {
+            shownShortcut = uiState.selectedShortcut
             pagerState.scrollToPage(target)
         } else if (pagerState.currentPage != target) {
             pagerState.animateScrollToPage(target)
@@ -241,10 +243,16 @@ private fun HomePager(
                 ?: false
         }
     }
-    // Only the page shown at the start unfolds, pages swiped to later are just there
-    val splashDismissed by LocalAppStartState.current.splashDismissed.collectAsStateWithLifecycle()
-    var introPlayed by remember { mutableStateOf(false) }
-    LaunchedEffect(splashDismissed) { if (splashDismissed) introPlayed = true }
+    // The ring unfolds at the start and after a mode change; once the user pages through the
+    // mode, the pages are just there
+    var pagedMode by remember { mutableStateOf<RangeShortcut?>(null) }
+    val animateIntro = pagedMode != uiState.selectedShortcut
+    val currentShortcut by rememberUpdatedState(uiState.selectedShortcut)
+    LaunchedEffect(pagerState) {
+        pagerState.interactionSource.interactions
+            .filterIsInstance<DragInteraction.Start>()
+            .collect { pagedMode = currentShortcut }
+    }
     val density = LocalDensity.current
     var headerHeight by remember { mutableStateOf(0.dp) }
 
@@ -268,9 +276,16 @@ private fun HomePager(
                 onCalendarSelect = onCalendarSelect,
                 onGroupSelect = onGroupSelect,
                 onClearSelection = onClearSelection,
-                onPrevious = { onPageChange(uiState.pageOffset - 1) },
-                onNext = { onPageChange(uiState.pageOffset + 1) },
-                animateIntro = !introPlayed,
+                onPrevious = {
+                    pagedMode = uiState.selectedShortcut
+                    onPageChange(uiState.pageOffset - 1)
+                },
+                onNext = {
+                    pagedMode = uiState.selectedShortcut
+                    onPageChange(uiState.pageOffset + 1)
+                },
+                animateIntro = animateIntro,
+                introKey = uiState.selectedShortcut,
             )
         }
         // Keeps the status bar clear of content scrolling below it
@@ -332,6 +347,7 @@ private fun HomePageContent(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     animateIntro: Boolean,
+    introKey: Any?,
 ) {
     // A page further away than the loaded neighbours stays empty until it is loaded
     if (page == null) {
@@ -371,6 +387,7 @@ private fun HomePageContent(
                 onGroupSelect = onGroupSelect,
                 onClearSelection = onClearSelection,
                 animateIntro = animateIntro,
+                introKey = introKey,
             )
         }
         item(key = "events title") {
@@ -588,6 +605,7 @@ private fun CalendarRing(
     onGroupSelect: (Long) -> Unit,
     onClearSelection: () -> Unit,
     animateIntro: Boolean,
+    introKey: Any?,
 ) {
     val groupColor = { group: GroupInfo -> group.color?.let(::Color) }
     val outline = MaterialTheme.colorScheme.outline
@@ -625,6 +643,7 @@ private fun CalendarRing(
             // Unfold once the splash screen is gone, not hidden behind it
             playIntro = LocalAppStartState.current.splashDismissed.collectAsStateWithLifecycle().value,
             animateIntro = animateIntro,
+            introKey = introKey,
             // A tap beside the ring clears the selection
             onSliceClick = { id -> if (id != null) onCalendarSelect(id) else if (hasSelection) onClearSelection() },
             modifier = Modifier.size(260.dp).testTag(HomeTestTags.RING),
