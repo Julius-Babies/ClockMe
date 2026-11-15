@@ -15,10 +15,10 @@
 
     <string name="home_last_event_sync">Last updated %1$s</string>
 
-    <string name="home_shortcut_today">Today</string>
-    <string name="home_shortcut_this_week">This week</string>
+    <string name="home_shortcut_today">Day</string>
+    <string name="home_shortcut_this_week">Week</string>
     <string name="home_shortcut_last_week">Last week</string>
-    <string name="home_shortcut_this_month">This month</string>
+    <string name="home_shortcut_this_month">Month</string>
     <string name="home_shortcut_last_month">Last month</string>
     <string name="home_shortcut_all">All time</string>
     <string name="home_page_week">Week %1$d</string>
