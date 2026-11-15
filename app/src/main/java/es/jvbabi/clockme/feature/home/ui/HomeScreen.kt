@@ -303,6 +303,22 @@ private fun HomePager(
     var lastPage by remember { mutableStateOf<HomePage?>(null) }
     SideEffect { if (currentPage != null) lastPage = currentPage }
     val shownPage = currentPage ?: lastPage
+    // The ring follows the swipe: its values go from the current page towards the neighbour as
+    // far as the swipe has come. The calendars are in the same order on every page
+    val ringCalendars by remember(uiState.pages) {
+        derivedStateOf {
+            val fraction = pagerState.currentPageOffsetFraction
+            val from = uiState.pages[pagerState.currentPage - CURRENT_PAGE]
+            val other = if (fraction < 0f) pagerState.currentPage - 1 else pagerState.currentPage + 1
+            val to = uiState.pages[other - CURRENT_PAGE]
+            if (from == null || to == null || fraction == 0f) return@derivedStateOf from?.calendars
+            val target = to.calendars.associate { it.calendarId to it.duration }
+            from.calendars.map { calendar ->
+                val end = target[calendar.calendarId] ?: Duration.ZERO
+                calendar.copy(duration = calendar.duration + (end - calendar.duration) * abs(fraction).toDouble())
+            }
+        }
+    }
 
     // Pulling down at the very top grows the ring to nearly the screen's width and moves the
     // events away; past the threshold it snaps into that view on a spring
@@ -399,6 +415,8 @@ private fun HomePager(
                 RingCard(
                     uiState = uiState,
                     page = page,
+                    ringCalendars = ringCalendars ?: page.calendars,
+                    followsSwipe = pagerState.isScrollInProgress,
                     ringSize = shownRingSize,
                     ringGap = ringGap,
                     floating = scrolled,
@@ -570,6 +588,9 @@ private val PULL_SPRING = spring<Float>(dampingRatio = 0.65f, stiffness = Spring
 private fun RingCard(
     uiState: HomeUiState,
     page: HomePage,
+    /** The calendars the ring shows, on their way to the next page while swiping. */
+    ringCalendars: List<CalendarTime>,
+    followsSwipe: Boolean,
     ringSize: Dp,
     ringGap: Dp,
     floating: Boolean,
@@ -596,6 +617,8 @@ private fun RingCard(
                 Spacer(Modifier.height(ringGap))
                 CalendarRing(
                     page = page,
+                    calendars = ringCalendars,
+                    animateChanges = !followsSwipe,
                     groups = uiState.groups,
                     size = ringSize,
                     selectedCalendar = page.calendar(uiState.selectedCalendarId),
@@ -886,6 +909,8 @@ private data class CenterLabel(val key: String, val name: String?, val color: Co
 @Composable
 private fun CalendarRing(
     page: HomePage,
+    calendars: List<CalendarTime>,
+    animateChanges: Boolean,
     groups: List<GroupInfo>,
     size: Dp,
     selectedCalendar: CalendarTime?,
@@ -916,7 +941,7 @@ private fun CalendarRing(
     }
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         DonutChart(
-            slices = page.calendars.map {
+            slices = calendars.map {
                 DonutSlice(
                     id = it.calendarId,
                     value = it.duration.inWholeSeconds.toFloat(),
@@ -932,6 +957,7 @@ private fun CalendarRing(
             // Unfold once the splash screen is gone, not hidden behind it
             playIntro = LocalAppStartState.current.splashDismissed.collectAsStateWithLifecycle().value,
             introKey = introKey,
+            animateChanges = animateChanges,
             // A tap beside the ring clears the selection
             onSliceClick = { id -> if (id != null) onCalendarSelect(id) else if (hasSelection) onClearSelection() },
             // Laid out at full size and scaled, so the ring and its center shrink as one

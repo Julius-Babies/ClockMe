@@ -100,6 +100,8 @@ fun DonutChart(
     animateIntro: Boolean = true,
     /** The ring unfolds again whenever this changes, e.g. on a mode change. */
     introKey: Any? = null,
+    /** `false` shows new values right away, e.g. while the caller animates them itself. */
+    animateChanges: Boolean = true,
     groups: List<DonutGroup> = emptyList(),
     selectedGroupId: Long? = null,
     onGroupClick: (Long) -> Unit = {},
@@ -131,7 +133,7 @@ fun DonutChart(
     if (!isEmpty) lastSlices = slices
     val shownSlices = if (isEmpty) lastSlices else slices
 
-    val values = animatedValues(shownSlices)
+    val values = animatedValues(shownSlices, animateChanges)
     val colors = rememberColors(shownSlices)
     val groupOfSlice = rememberGroups(shownSlices)
     val groupColors = groups.associate { it.id to it.color }
@@ -289,14 +291,20 @@ fun DonutChart(
 
 /**
  * The values of the slices, animated from the previous values to the current ones whenever they
- * change. Removed slices animate to 0 and stay in the map until then.
+ * change. Removed slices animate to 0 and stay in the map until then. Without [animate] they
+ * follow right away, and a later animation starts from there.
  */
 @Composable
-private fun animatedValues(slices: List<DonutSlice>): Map<Long, Float> {
+private fun animatedValues(slices: List<DonutSlice>, animate: Boolean): Map<Long, Float> {
     val targets = slices.associate { it.id to it.value }
     var from by remember { mutableStateOf(targets) }
     var to by remember { mutableStateOf(targets) }
     val progress = remember { Animatable(1f) }
+    if (!animate) {
+        from = targets
+        to = targets
+        return targets
+    }
 
     fun current(): Map<Long, Float> {
         val t = progress.value
