@@ -1,5 +1,8 @@
 package es.jvbabi.clockme.feature.home.ui
 
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.unit.Constraints
 import kotlinx.coroutines.flow.drop
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -333,7 +336,11 @@ private fun HomePager(
                     modifier = Modifier
                         .onSizeChanged {
                             val height = with(density) { it.height.toDp() }
-                            cardExpandedHeight = height + (RING_SIZE - ringSize(collapse))
+                            val expanded = height + (RING_SIZE - ringSize(collapse))
+                            // Rounding the shrunk ring wobbles by a pixel; that must not move the pages
+                            if (collapse == 0f || abs((expanded - cardExpandedHeight).value) > 2f) {
+                                cardExpandedHeight = expanded
+                            }
                         }
                         // Swipes on the card page and scroll like on the page below it
                         .scrollable(
@@ -464,11 +471,11 @@ private fun HomePageContent(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            top = topPadding,
-            bottom = LocalBottomNavBarHeight.current + 16.dp,
-        ),
+        contentPadding = PaddingValues(bottom = LocalBottomNavBarHeight.current + 16.dp),
     ) {
+        // Room for the header and the card as an item, not as padding: its scroll offset is what
+        // collapses the card, and it is taller than the whole collapse
+        item(key = "top space") { Spacer(Modifier.height(topPadding)) }
         item(key = "events title") {
             val selectedName = selectedCalendar?.name ?: selectedGroup?.name
             Text(
@@ -596,15 +603,16 @@ private fun ShortcutSelector(
     onSelect: (RangeShortcut) -> Unit,
     compactness: Float = 0f,
 ) {
-    // In the pill the labels shrink a little and keep away from its rounded ends
+    // In the pill the labels shrink a little and keep away from its rounded ends. The row is
+    // scaled as a whole, so the text is not laid out anew in every frame
     Row(
-        horizontalArrangement = Arrangement.spacedBy(16.dp - 2.dp * compactness),
-        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier
             .fillMaxWidth()
             .testTag(HomeTestTags.SHORTCUTS)
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp + 4.dp * compactness),
+            .padding(horizontal = 16.dp + 4.dp * compactness)
+            .scaledTo(1f - 0.2f * compactness, fromStart = true),
     ) {
         shortcuts.forEach { shortcut ->
             key(shortcut) {
@@ -612,7 +620,6 @@ private fun ShortcutSelector(
                     label = stringResource(shortcut.label),
                     selected = shortcut == selected,
                     onClick = { onSelect(shortcut) },
-                    textScale = 1f - 0.2f * compactness,
                     modifier = Modifier.alignByBaseline(),
                 )
             }
@@ -627,7 +634,6 @@ private fun ShortcutText(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    textScale: Float = 1f,
 ) {
     val color by animateColorAsState(
         if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
@@ -635,7 +641,7 @@ private fun ShortcutText(
     )
     val scale by animateFloatAsState(if (selected) 1f else 0.75f, label = "scale")
     val baseStyle = MaterialTheme.typography.headlineSmall
-    val style = baseStyle.copy(fontSize = baseStyle.fontSize * scale * textScale)
+    val style = baseStyle.copy(fontSize = baseStyle.fontSize * scale)
 
     Box(
         modifier.selectable(
@@ -917,15 +923,20 @@ private fun HomeContentPreview() {
     }
 }
 
-/** Measures the content as usual but takes up and draws it at [scale], centered. */
-private fun Modifier.scaledTo(scale: Float) = layout { measurable, constraints ->
-    val placeable = measurable.measure(constraints)
+/**
+ * Measures the content as usual but takes up and draws it at [scale]; centered, or vertically
+ * centered on its start edge if [fromStart].
+ */
+private fun Modifier.scaledTo(scale: Float, fromStart: Boolean = false) = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints.copy(maxWidth = Constraints.Infinity, maxHeight = Constraints.Infinity))
     val width = (placeable.width * scale).roundToInt()
     val height = (placeable.height * scale).roundToInt()
     layout(width, height) {
-        placeable.placeWithLayer((width - placeable.width) / 2, (height - placeable.height) / 2) {
+        val x = if (fromStart) 0 else (width - placeable.width) / 2
+        placeable.placeWithLayer(x, (height - placeable.height) / 2) {
             scaleX = scale
             scaleY = scale
+            if (fromStart) transformOrigin = TransformOrigin(0f, 0.5f)
         }
     }
 }
