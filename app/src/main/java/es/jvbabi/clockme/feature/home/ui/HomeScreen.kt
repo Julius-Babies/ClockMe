@@ -319,7 +319,7 @@ private fun HomePager(
                 if (source != NestedScrollSource.UserInput) return Offset.Zero
                 // In the full view, or while pulled, the pull takes everything; otherwise only
                 // pushing back up undoes the pull before anything scrolls
-                if (!pull.expanded && (available.y >= 0f || pull.offset <= 0f)) return Offset.Zero
+                if (!pull.expanded && (available.y >= 0f || !pull.takesPushUp)) return Offset.Zero
                 pull.drag(available.y / pullRangePx, haptics)
                 return Offset(0f, available.y)
             }
@@ -446,6 +446,9 @@ private val PULL_RANGE = 240.dp
 /** Share of the way into (or out of) the full view that follows the finger; then it snaps. */
 private const val PULL_FOLLOW = 0.2f
 
+/** Room to push up after flipping back, before the events scroll; in pull ranges like [PULL_FOLLOW]. */
+private const val PULL_SLACK = 0.1f
+
 /** Makes the pull heavy: the view moves this much per finger travel, less towards the threshold. */
 private const val PULL_WEIGHT = 0.45f
 
@@ -482,6 +485,12 @@ private class PullState(private val scope: CoroutineScope) {
 
     /** The current gesture went to the pull, so its fling does too. */
     private var dragging = false
+
+    /** The current gesture flipped the view; back on the normal side it gets some slack upwards. */
+    private var flipped = false
+
+    /** Pushing up still goes to the pull rather than scrolling the events. */
+    val takesPushUp get() = offset > if (flipped) -PULL_SLACK else 0f
     private var baseJob: Job? = null
     private var offsetJob: Job? = null
     private var centeringJob: Job? = null
@@ -497,11 +506,12 @@ private class PullState(private val scope: CoroutineScope) {
         offset = if (expanded) {
             (offset + delta * weight).coerceAtMost(PULL_FOLLOW / 2f)
         } else {
-            (offset + delta * weight).coerceAtLeast(0f)
+            (offset + delta * weight).coerceAtLeast(if (flipped) -PULL_SLACK else 0f)
         }
         val flip = if (expanded) offset <= -PULL_FOLLOW else offset >= PULL_FOLLOW
         if (flip) {
             haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+            flipped = true
             toggle(expand = !expanded)
         }
     }
@@ -510,6 +520,7 @@ private class PullState(private val scope: CoroutineScope) {
     fun release(velocity: Float): Boolean {
         if (!dragging) return false
         dragging = false
+        flipped = false
         when {
             !expanded && velocity > PULL_FLING -> toggle(expand = true)
             expanded && velocity < -PULL_FLING -> toggle(expand = false)
