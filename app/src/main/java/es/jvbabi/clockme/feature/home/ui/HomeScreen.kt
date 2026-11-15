@@ -316,7 +316,8 @@ private fun HomePager(
             fun atTop() = listStates[pagerState.currentPage]?.canScrollBackward == false
 
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (source != NestedScrollSource.UserInput) return Offset.Zero
+                // Only vertical moves pull; swipes between pages pass through
+                if (source != NestedScrollSource.UserInput || available.y == 0f) return Offset.Zero
                 // In the full view, or while pulled, the pull takes everything; otherwise only
                 // pushing back up undoes the pull before anything scrolls
                 if (!pull.expanded && (available.y >= 0f || !pull.takesPushUp)) return Offset.Zero
@@ -332,7 +333,7 @@ private fun HomePager(
 
             override suspend fun onPreFling(available: Velocity): Velocity {
                 if (!pull.release(available.y / pullRangePx)) return Velocity.Zero
-                return available
+                return Velocity(0f, available.y)
             }
         }
     }
