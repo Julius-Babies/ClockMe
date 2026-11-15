@@ -1,5 +1,21 @@
 package es.jvbabi.clockme.feature.home.ui
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CoroutineScope
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.Stable
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.Spring
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.unit.Constraints
@@ -287,11 +303,66 @@ private fun HomePager(
     SideEffect { if (currentPage != null) lastPage = currentPage }
     val shownPage = currentPage ?: lastPage
 
+    // Pulling down at the very top grows the ring to nearly the screen's width and moves the
+    // events away; past the threshold it snaps into that view on a spring
+    val windowWidth = with(density) { LocalWindowInfo.current.containerSize.width.toDp() }
+    val hugeRingSize = maxOf(RING_SIZE, windowWidth - 24.dp)
+    val pullRangePx = with(density) { PULL_RANGE.toPx() }
+    val growPx = with(density) { (hugeRingSize - RING_SIZE).toPx() }
+    val pull = remember { PullState() }
+    val scope = rememberCoroutineScope()
+    val pullConnection = remember(pullRangePx) {
+        object : NestedScrollConnection {
+            fun atTop() = listStates[pagerState.currentPage]?.canScrollBackward == false
+
+            fun drag(delta: Float) {
+                pull.animation?.cancel()
+                val before = pull.expansion
+                // Gets stiffer the further it is pulled, and very stiff past the full view
+                val resistance = if (before >= 1f) 0.15f else 1f - 0.5f * before
+                pull.expansion = (before + delta / pullRangePx * resistance).coerceIn(0f, 1.2f)
+                val threshold = if (pull.expanded) 1f - PULL_THRESHOLD else PULL_THRESHOLD
+                if ((before - threshold) * (pull.expansion - threshold) < 0f) {
+                    haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                }
+            }
+
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // Pushing up first takes the view back before anything scrolls
+                if (source != NestedScrollSource.UserInput || available.y >= 0f || pull.expansion <= 0f) return Offset.Zero
+                drag(available.y)
+                return Offset(0f, available.y)
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (source != NestedScrollSource.UserInput || available.y <= 0f || !atTop()) return Offset.Zero
+                drag(available.y)
+                return Offset(0f, available.y)
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (pull.expansion <= 0f && !pull.expanded) return Velocity.Zero
+                val velocity = available.y / pullRangePx
+                val target = when {
+                    velocity > PULL_FLING -> 1f
+                    velocity < -PULL_FLING -> 0f
+                    pull.expanded -> if (pull.expansion > 1f - PULL_THRESHOLD) 1f else 0f
+                    else -> if (pull.expansion > PULL_THRESHOLD) 1f else 0f
+                }
+                pull.settle(scope, target, velocity)
+                return available
+            }
+        }
+    }
+    BackHandler(enabled = pull.expanded) { pull.settle(scope, 0f, 0f) }
+    val expansion = pull.expansion.coerceAtLeast(0f)
+    val shownRingSize = if (expansion > 0f) lerp(RING_SIZE, hugeRingSize, expansion) else ringSize(collapse)
+
     var headerHeight by remember { mutableStateOf(0.dp) }
     // Height of the card fully expanded; only its ring changes size, the rest stays
     var cardExpandedHeight by remember { mutableStateOf(0.dp) }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().nestedScroll(pullConnection)) {
         HorizontalPager(
             state = pagerState,
             userScrollEnabled = uiState.unit != null,
@@ -307,6 +378,12 @@ private fun HomePager(
                 page = uiState.pages[index - CURRENT_PAGE],
                 listState = listState,
                 topPadding = topInset + headerHeight + cardExpandedHeight,
+                // The events move down with the growing ring and fade away
+                modifier = Modifier.graphicsLayer {
+                    val e = pull.expansion.coerceAtLeast(0f)
+                    translationY = growPx * e
+                    alpha = (1f - 1.5f * e).coerceIn(0f, 1f)
+                },
             )
         }
         Column(Modifier.padding(top = topInset)) {
@@ -325,7 +402,7 @@ private fun HomePager(
                 RingCard(
                     uiState = uiState,
                     page = page,
-                    collapse = collapse,
+                    ringSize = shownRingSize,
                     floating = scrolled,
                     selectionStrength = selectionStrength,
                     onCalendarSelect = onCalendarSelect,
@@ -336,9 +413,9 @@ private fun HomePager(
                     modifier = Modifier
                         .onSizeChanged {
                             val height = with(density) { it.height.toDp() }
-                            val expanded = height + (RING_SIZE - ringSize(collapse))
+                            val expanded = height + (RING_SIZE - shownRingSize)
                             // Rounding the shrunk ring wobbles by a pixel; that must not move the pages
-                            if (collapse == 0f || abs((expanded - cardExpandedHeight).value) > 2f) {
+                            if ((collapse == 0f && expansion == 0f) || abs((expanded - cardExpandedHeight).value) > 2f) {
                                 cardExpandedHeight = expanded
                             }
                         }
@@ -366,15 +443,49 @@ private val RING_COLLAPSED_SIZE = 150.dp
 
 private fun ringSize(collapse: Float) = lerp(RING_SIZE, RING_COLLAPSED_SIZE, collapse)
 
+/** How far to pull for the full view of the ring. */
+private val PULL_RANGE = 280.dp
+
+/** Share of the pull past which a release snaps into the full view (or back out of it). */
+private const val PULL_THRESHOLD = 0.35f
+
+/** Pull ranges per second that snap on their own, whatever the distance. */
+private const val PULL_FLING = 1.5f
+
+/** The pull into the full view of the ring: 0 normal, 1 full view, a bit more while overpulled. */
+@Stable
+private class PullState {
+    var expansion by mutableFloatStateOf(0f)
+
+    /** Whether it rests (or springs towards) the full view. */
+    var expanded by mutableStateOf(false)
+        private set
+
+    var animation: Job? = null
+
+    fun settle(scope: CoroutineScope, target: Float, velocity: Float) {
+        expanded = target == 1f
+        animation?.cancel()
+        animation = scope.launch {
+            animate(
+                initialValue = expansion,
+                targetValue = target,
+                initialVelocity = velocity,
+                animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
+            ) { value, _ -> expansion = value }
+        }
+    }
+}
+
 /**
  * The ring of [page] with the page navigator below it. Lies flat on the page at first; with
- * [collapse] the ring shrinks, and once [floating] the card lifts off like the header.
+ * scrolling the ring shrinks to [ringSize] (or grows when pulled), and once [floating] the card lifts off like the header.
  */
 @Composable
 private fun RingCard(
     uiState: HomeUiState,
     page: HomePage,
-    collapse: Float,
+    ringSize: Dp,
     floating: Boolean,
     selectionStrength: Float,
     onCalendarSelect: (Long?) -> Unit,
@@ -399,7 +510,7 @@ private fun RingCard(
                 CalendarRing(
                     page = page,
                     groups = uiState.groups,
-                    size = ringSize(collapse),
+                    size = ringSize,
                     selectedCalendar = page.calendar(uiState.selectedCalendarId),
                     selectedGroup = uiState.selectedGroup,
                     selectionStrength = selectionStrength,
@@ -460,6 +571,7 @@ private fun HomePageContent(
     page: HomePage?,
     listState: LazyListState,
     topPadding: Dp,
+    modifier: Modifier = Modifier,
 ) {
     // A page further away than the loaded neighbours stays empty until it is loaded
     if (page == null) {
@@ -470,7 +582,7 @@ private fun HomePageContent(
     val selectedGroup = uiState.selectedGroup
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = LocalBottomNavBarHeight.current + 16.dp),
     ) {
         // Room for the header and the card as an item, not as padding: its scroll offset is what
