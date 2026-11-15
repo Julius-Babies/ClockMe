@@ -1,8 +1,14 @@
 package es.jvbabi.clockme.feature.home.ui
 
+import androidx.compose.runtime.SideEffect
+import kotlin.math.abs
+import androidx.compose.ui.unit.lerp
+import androidx.compose.ui.util.lerp
+import androidx.compose.ui.layout.layout
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.gestures.Orientation
 import android.text.format.DateUtils
-import androidx.compose.foundation.interaction.DragInteraction
-import kotlinx.coroutines.flow.filterIsInstance
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
@@ -202,8 +208,9 @@ private const val PAGE_COUNT = 100_000
 private const val CURRENT_PAGE = PAGE_COUNT - 1
 
 /**
- * The whole screen pages horizontally through the units of the selected shortcut, under a
- * header with the shortcuts that stays on top and floats once the page is scrolled.
+ * The whole screen pages horizontally through the units of the selected shortcut. On top stay the
+ * shortcuts and a single card with the ring and the page navigator, which always shows the current
+ * page: its ring morphs from page to page. The card shrinks as the page is scrolled and then floats.
  */
 @Composable
 private fun HomePager(
@@ -234,27 +241,34 @@ private fun HomePager(
         snapshotFlow { pagerState.settledPage }.collect { currentOnPageChange(it - CURRENT_PAGE) }
     }
 
-    // Scroll state of each composed page, so the header knows whether the current one is scrolled
+    val density = LocalDensity.current
+    val collapseRangePx = with(density) { (RING_SIZE - RING_COLLAPSED_SIZE).toPx() }
+    // Scroll state of each composed page, so the card knows how far the current one is scrolled
     val listStates = remember { mutableStateMapOf<Int, LazyListState>() }
-    val scrolled by remember {
+    fun collapseOf(page: Int): Float {
+        val state = listStates[page] ?: return 0f
+        if (state.firstVisibleItemIndex > 0) return 1f
+        return (state.firstVisibleItemScrollOffset / collapseRangePx).coerceIn(0f, 1f)
+    }
+    // Blends between the current page and the one being swiped to
+    val collapse by remember {
         derivedStateOf {
-            listStates[pagerState.currentPage]
-                ?.let { it.firstVisibleItemIndex > 0 || it.firstVisibleItemScrollOffset > 0 }
-                ?: false
+            val fraction = pagerState.currentPageOffsetFraction
+            val other = if (fraction < 0f) pagerState.currentPage - 1 else pagerState.currentPage + 1
+            lerp(collapseOf(pagerState.currentPage), collapseOf(other), abs(fraction))
         }
     }
-    // The ring unfolds at the start and after a mode change; once the user pages through the
-    // mode, the pages are just there
-    var pagedMode by remember { mutableStateOf<RangeShortcut?>(null) }
-    val animateIntro = pagedMode != uiState.selectedShortcut
-    val currentShortcut by rememberUpdatedState(uiState.selectedShortcut)
-    LaunchedEffect(pagerState) {
-        pagerState.interactionSource.interactions
-            .filterIsInstance<DragInteraction.Start>()
-            .collect { pagedMode = currentShortcut }
-    }
-    val density = LocalDensity.current
+    val scrolled by remember { derivedStateOf { collapse > 0f } }
+
+    // The card shows the current page; a page not loaded yet keeps the last one
+    val currentPage = uiState.pages[pagerState.currentPage - CURRENT_PAGE]
+    var lastPage by remember { mutableStateOf<HomePage?>(null) }
+    SideEffect { if (currentPage != null) lastPage = currentPage }
+    val shownPage = currentPage ?: lastPage
+
     var headerHeight by remember { mutableStateOf(0.dp) }
+    // Height of the card fully expanded; only its ring changes size, the rest stays
+    var cardExpandedHeight by remember { mutableStateOf(0.dp) }
 
     Box(Modifier.fillMaxSize()) {
         HorizontalPager(
@@ -271,35 +285,115 @@ private fun HomePager(
                 uiState = uiState,
                 page = uiState.pages[index - CURRENT_PAGE],
                 listState = listState,
-                topPadding = topInset + headerHeight,
-                selectionStrength = selectionStrength,
-                onCalendarSelect = onCalendarSelect,
-                onGroupSelect = onGroupSelect,
-                onClearSelection = onClearSelection,
-                onPrevious = {
-                    pagedMode = uiState.selectedShortcut
-                    onPageChange(uiState.pageOffset - 1)
-                },
-                onNext = {
-                    pagedMode = uiState.selectedShortcut
-                    onPageChange(uiState.pageOffset + 1)
-                },
-                animateIntro = animateIntro,
-                introKey = uiState.selectedShortcut,
+                topPadding = topInset + headerHeight + cardExpandedHeight,
             )
         }
-        FloatingHeader(
-            floating = scrolled,
-            modifier = Modifier
-                .padding(top = topInset)
-                .onSizeChanged { headerHeight = with(density) { it.height.toDp() } },
-        ) { progress ->
-            ShortcutSelector(
-                shortcuts = uiState.shortcuts,
-                selected = uiState.selectedShortcut,
-                onSelect = onShortcutSelect,
-                compactness = progress,
-            )
+        Column(Modifier.padding(top = topInset)) {
+            FloatingHeader(
+                floating = scrolled,
+                modifier = Modifier.onSizeChanged { headerHeight = with(density) { it.height.toDp() } },
+            ) { progress ->
+                ShortcutSelector(
+                    shortcuts = uiState.shortcuts,
+                    selected = uiState.selectedShortcut,
+                    onSelect = onShortcutSelect,
+                    compactness = progress,
+                )
+            }
+            shownPage?.let { page ->
+                RingCard(
+                    uiState = uiState,
+                    page = page,
+                    collapse = collapse,
+                    floating = scrolled,
+                    selectionStrength = selectionStrength,
+                    onCalendarSelect = onCalendarSelect,
+                    onGroupSelect = onGroupSelect,
+                    onClearSelection = onClearSelection,
+                    onPrevious = { onPageChange(uiState.pageOffset - 1) },
+                    onNext = { onPageChange(uiState.pageOffset + 1) },
+                    modifier = Modifier
+                        .onSizeChanged {
+                            val height = with(density) { it.height.toDp() }
+                            cardExpandedHeight = height + (RING_SIZE - ringSize(collapse))
+                        }
+                        // Swipes on the card page and scroll like on the page below it
+                        .scrollable(
+                            state = pagerState,
+                            orientation = Orientation.Horizontal,
+                            enabled = uiState.unit != null,
+                            reverseDirection = true,
+                            flingBehavior = PagerDefaults.flingBehavior(pagerState),
+                        )
+                        .then(
+                            listStates[pagerState.currentPage]?.let { list ->
+                                Modifier.scrollable(list, Orientation.Vertical, reverseDirection = true)
+                            } ?: Modifier,
+                        ),
+                )
+            }
+        }
+    }
+}
+
+private val RING_SIZE = 260.dp
+private val RING_COLLAPSED_SIZE = 150.dp
+
+private fun ringSize(collapse: Float) = lerp(RING_SIZE, RING_COLLAPSED_SIZE, collapse)
+
+/**
+ * The ring of [page] with the page navigator below it. Lies flat on the page at first; with
+ * [collapse] the ring shrinks, and once [floating] the card lifts off like the header.
+ */
+@Composable
+private fun RingCard(
+    uiState: HomeUiState,
+    page: HomePage,
+    collapse: Float,
+    floating: Boolean,
+    selectionStrength: Float,
+    onCalendarSelect: (Long?) -> Unit,
+    onGroupSelect: (Long) -> Unit,
+    onClearSelection: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val progress by animateFloatAsState(if (floating) 1f else 0f, label = "card float")
+    val colors = MaterialTheme.colorScheme
+    // Constant outer padding, so only the ring changes the card's height
+    Box(modifier.fillMaxWidth().padding(top = 4.dp)) {
+        Surface(
+            shape = RoundedCornerShape(32.dp * progress),
+            color = colors.background,
+            shadowElevation = 8.dp * progress,
+            border = BorderStroke(Dp.Hairline, colors.outlineVariant.copy(alpha = 0.6f * progress)),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp * progress),
+        ) {
+            Column(Modifier.padding(top = 8.dp, bottom = 4.dp)) {
+                CalendarRing(
+                    page = page,
+                    groups = uiState.groups,
+                    size = ringSize(collapse),
+                    selectedCalendar = page.calendar(uiState.selectedCalendarId),
+                    selectedGroup = uiState.selectedGroup,
+                    selectionStrength = selectionStrength,
+                    onCalendarSelect = onCalendarSelect,
+                    onGroupSelect = onGroupSelect,
+                    onClearSelection = onClearSelection,
+                    introKey = uiState.selectedShortcut,
+                )
+                val unit = uiState.unit
+                val today = uiState.today
+                if (unit != null && today != null && page.firstDay != null) {
+                    PageNavigator(
+                        label = rememberPageLabel(unit, page.firstDay, today),
+                        canGoNext = page.offset < 0,
+                        onPrevious = onPrevious,
+                        onNext = onNext,
+                    )
+                }
+            }
         }
     }
 }
@@ -341,14 +435,6 @@ private fun HomePageContent(
     page: HomePage?,
     listState: LazyListState,
     topPadding: Dp,
-    selectionStrength: Float,
-    onCalendarSelect: (Long?) -> Unit,
-    onGroupSelect: (Long) -> Unit,
-    onClearSelection: () -> Unit,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
-    animateIntro: Boolean,
-    introKey: Any?,
 ) {
     // A page further away than the loaded neighbours stays empty until it is loaded
     if (page == null) {
@@ -361,36 +447,10 @@ private fun HomePageContent(
         state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
-            top = topPadding + 8.dp,
+            top = topPadding,
             bottom = LocalBottomNavBarHeight.current + 16.dp,
         ),
     ) {
-        val unit = uiState.unit
-        val today = uiState.today
-        if (unit != null && today != null && page.firstDay != null) {
-            item(key = "navigator") {
-                PageNavigator(
-                    label = rememberPageLabel(unit, page.firstDay, today),
-                    canGoNext = page.offset < 0,
-                    onPrevious = onPrevious,
-                    onNext = onNext,
-                )
-            }
-        }
-        item(key = "ring") {
-            CalendarRing(
-                page = page,
-                groups = uiState.groups,
-                selectedCalendar = selectedCalendar,
-                selectedGroup = selectedGroup,
-                selectionStrength = selectionStrength,
-                onCalendarSelect = onCalendarSelect,
-                onGroupSelect = onGroupSelect,
-                onClearSelection = onClearSelection,
-                animateIntro = animateIntro,
-                introKey = introKey,
-            )
-        }
         item(key = "events title") {
             val selectedName = selectedCalendar?.name ?: selectedGroup?.name
             Text(
@@ -398,7 +458,7 @@ private fun HomePageContent(
                     ?.let { stringResource(R.string.home_events_of_calendar, it) }
                     ?: stringResource(R.string.home_events),
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp),
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
             )
         }
         if (page.events.isEmpty()) {
@@ -603,13 +663,13 @@ private data class CenterLabel(val key: String, val name: String?, val color: Co
 private fun CalendarRing(
     page: HomePage,
     groups: List<GroupInfo>,
+    size: Dp,
     selectedCalendar: CalendarTime?,
     selectedGroup: GroupInfo?,
     selectionStrength: Float,
     onCalendarSelect: (Long?) -> Unit,
     onGroupSelect: (Long) -> Unit,
     onClearSelection: () -> Unit,
-    animateIntro: Boolean,
     introKey: Any?,
 ) {
     val groupColor = { group: GroupInfo -> group.color?.let(::Color) }
@@ -630,7 +690,7 @@ private fun CalendarRing(
         )
         else -> CenterLabel(key = "total", name = null, color = null, duration = page.totalDuration)
     }
-    Box(Modifier.fillMaxWidth().padding(top = 16.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         DonutChart(
             slices = page.calendars.map {
                 DonutSlice(
@@ -647,11 +707,14 @@ private fun CalendarRing(
             selectionStrength = selectionStrength,
             // Unfold once the splash screen is gone, not hidden behind it
             playIntro = LocalAppStartState.current.splashDismissed.collectAsStateWithLifecycle().value,
-            animateIntro = animateIntro,
             introKey = introKey,
             // A tap beside the ring clears the selection
             onSliceClick = { id -> if (id != null) onCalendarSelect(id) else if (hasSelection) onClearSelection() },
-            modifier = Modifier.size(260.dp).testTag(HomeTestTags.RING),
+            // Laid out at full size and scaled, so the ring and its center shrink as one
+            modifier = Modifier
+                .scaledTo(size / RING_SIZE)
+                .size(RING_SIZE)
+                .testTag(HomeTestTags.RING),
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -833,5 +896,18 @@ private fun HomeContentPreview() {
             onShortcutSelect = {},
             onPageChange = {},
         )
+    }
+}
+
+/** Measures the content as usual but takes up and draws it at [scale], centered. */
+private fun Modifier.scaledTo(scale: Float) = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    val width = (placeable.width * scale).roundToInt()
+    val height = (placeable.height * scale).roundToInt()
+    layout(width, height) {
+        placeable.placeWithLayer((width - placeable.width) / 2, (height - placeable.height) / 2) {
+            scaleX = scale
+            scaleY = scale
+        }
     }
 }
