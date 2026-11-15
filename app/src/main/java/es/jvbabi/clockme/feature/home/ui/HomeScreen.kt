@@ -1,5 +1,8 @@
 package es.jvbabi.clockme.feature.home.ui
 
+import kotlinx.coroutines.flow.drop
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.SideEffect
 import kotlin.math.abs
 import androidx.compose.ui.unit.lerp
@@ -227,10 +230,13 @@ private fun HomePager(
 
     // Follow the state: jump when the mode changes (the ring unfolds there), slide otherwise
     var shownShortcut by remember { mutableStateOf(uiState.selectedShortcut) }
+    // The page jumped to on a mode change, which gets no haptic tick
+    val jumpTarget = remember { intArrayOf(-1) }
     LaunchedEffect(uiState.selectedShortcut, uiState.pageOffset) {
         val target = CURRENT_PAGE + uiState.pageOffset
         if (uiState.selectedShortcut != shownShortcut) {
             shownShortcut = uiState.selectedShortcut
+            jumpTarget[0] = if (target != pagerState.currentPage) target else -1
             pagerState.scrollToPage(target)
         } else if (pagerState.currentPage != target) {
             pagerState.animateScrollToPage(target)
@@ -239,6 +245,18 @@ private fun HomePager(
     val currentOnPageChange by rememberUpdatedState(onPageChange)
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { currentOnPageChange(it - CURRENT_PAGE) }
+    }
+    // A tick whenever another page takes over the card, half way through a swipe; not on the
+    // jump to a new mode
+    val haptics = LocalHapticFeedback.current
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }.drop(1).collect { page ->
+            if (page == jumpTarget[0]) {
+                jumpTarget[0] = -1
+            } else {
+                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+            }
+        }
     }
 
     val density = LocalDensity.current
