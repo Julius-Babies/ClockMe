@@ -308,7 +308,6 @@ private fun HomePager(
     val windowWidth = with(density) { LocalWindowInfo.current.containerSize.width.toDp() }
     val hugeRingSize = maxOf(RING_SIZE, windowWidth - 24.dp)
     val pullRangePx = with(density) { PULL_RANGE.toPx() }
-    val growPx = with(density) { (hugeRingSize - RING_SIZE).toPx() }
     val pull = remember { PullState() }
     val scope = rememberCoroutineScope()
     val pullConnection = remember(pullRangePx) {
@@ -381,7 +380,20 @@ private fun HomePager(
     // Height of the card fully expanded; only its ring changes size, the rest stays
     var cardExpandedHeight by remember { mutableStateOf(0.dp) }
 
-    Box(Modifier.fillMaxSize().nestedScroll(pullConnection)) {
+    // In the full view the card reaches down to just above the navigation bar: the ring centered
+    // in it, the navigator at its bottom. The space goes above and below the ring in equal parts
+    var screenHeight by remember { mutableStateOf(0.dp) }
+    val fullCardHeight = screenHeight - topInset - headerHeight - LocalBottomNavBarHeight.current - 8.dp
+    val fullViewGap = ((fullCardHeight - (cardExpandedHeight - RING_SIZE) - hugeRingSize) / 2).coerceAtLeast(0.dp)
+    val ringGap = fullViewGap * expansion
+    val fullViewGrowPx = with(density) { (hugeRingSize - RING_SIZE + fullViewGap * 2).toPx() }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onSizeChanged { screenHeight = with(density) { it.height.toDp() } }
+            .nestedScroll(pullConnection),
+    ) {
         HorizontalPager(
             state = pagerState,
             userScrollEnabled = uiState.unit != null,
@@ -400,7 +412,7 @@ private fun HomePager(
                 // The events move down with the growing ring and fade away
                 modifier = Modifier.graphicsLayer {
                     val e = pull.expansion.coerceAtLeast(0f)
-                    translationY = growPx * e
+                    translationY = fullViewGrowPx * e
                     alpha = (1f - 1.5f * e).coerceIn(0f, 1f)
                 },
             )
@@ -422,6 +434,7 @@ private fun HomePager(
                     uiState = uiState,
                     page = page,
                     ringSize = shownRingSize,
+                    ringGap = ringGap,
                     floating = scrolled,
                     selectionStrength = selectionStrength,
                     onCalendarSelect = onCalendarSelect,
@@ -432,7 +445,7 @@ private fun HomePager(
                     modifier = Modifier
                         .onSizeChanged {
                             val height = with(density) { it.height.toDp() }
-                            val expanded = height + (RING_SIZE - shownRingSize)
+                            val expanded = height + (RING_SIZE - shownRingSize) - ringGap * 2
                             // Rounding the shrunk ring wobbles by a pixel; that must not move the pages
                             if ((collapse == 0f && expansion == 0f) || abs((expanded - cardExpandedHeight).value) > 2f) {
                                 cardExpandedHeight = expanded
@@ -507,13 +520,15 @@ private class PullState {
 
 /**
  * The ring of [page] with the page navigator below it. Lies flat on the page at first; with
- * scrolling the ring shrinks to [ringSize] (or grows when pulled), and once [floating] the card lifts off like the header.
+ * scrolling the ring shrinks to [ringSize] (or grows when pulled, with [ringGap] above and below
+ * it), and once [floating] the card lifts off like the header.
  */
 @Composable
 private fun RingCard(
     uiState: HomeUiState,
     page: HomePage,
     ringSize: Dp,
+    ringGap: Dp,
     floating: Boolean,
     selectionStrength: Float,
     onCalendarSelect: (Long?) -> Unit,
@@ -535,6 +550,7 @@ private fun RingCard(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp * progress),
         ) {
             Column(Modifier.padding(top = 8.dp, bottom = 4.dp)) {
+                Spacer(Modifier.height(ringGap))
                 CalendarRing(
                     page = page,
                     groups = uiState.groups,
@@ -547,6 +563,7 @@ private fun RingCard(
                     onClearSelection = onClearSelection,
                     introKey = uiState.selectedShortcut,
                 )
+                Spacer(Modifier.height(ringGap))
                 val unit = uiState.unit
                 val today = uiState.today
                 if (unit != null && today != null && page.firstDay != null) {
