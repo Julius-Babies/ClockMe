@@ -315,21 +315,35 @@ private fun HomePager(
         object : NestedScrollConnection {
             fun atTop() = listStates[pagerState.currentPage]?.canScrollBackward == false
 
+            /**
+             * Only the first stretch follows the finger, and heavily; at its end the view springs
+             * the rest of the way on its own, and the rest of the gesture is ignored.
+             */
             fun drag(delta: Float) {
                 pull.animation?.cancel()
+                val rest = if (pull.expanded) 1f else 0f
                 val before = pull.expansion
-                // Gets stiffer the further it is pulled, and very stiff past the full view
-                val resistance = if (before >= 1f) 0.15f else 1f - 0.5f * before
-                pull.expansion = (before + delta / pullRangePx * resistance).coerceIn(0f, 1.2f)
-                val threshold = if (pull.expanded) 1f - PULL_THRESHOLD else PULL_THRESHOLD
-                if ((before - threshold) * (pull.expansion - threshold) < 0f) {
+                // How far into the stretch, 0 at rest and 1 at the threshold
+                val progress = abs(before - rest) / PULL_FOLLOW
+                val weight = PULL_WEIGHT * (1f - 0.5f * progress.coerceAtMost(1f))
+                // Pulling further into the full view only gives a little
+                val beyond = pull.expanded && delta > 0f
+                val step = delta / pullRangePx * if (beyond) PULL_WEIGHT * 0.15f else weight
+                pull.expansion = (before + step).coerceIn(0f, 1f + PULL_FOLLOW / 2f)
+                if (abs(pull.expansion - rest) >= PULL_FOLLOW && !beyond) {
                     haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                    pull.latched = true
+                    // Leaves with some speed of its own, towards the other side
+                    pull.settle(scope, 1f - rest, if (rest == 0f) SNAP_VELOCITY else -SNAP_VELOCITY)
                 }
             }
 
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source != NestedScrollSource.UserInput) return Offset.Zero
+                // Once it snapped, the gesture is spent
+                if (pull.latched) return available.copy(x = 0f)
                 // Pushing up first takes the view back before anything scrolls
-                if (source != NestedScrollSource.UserInput || available.y >= 0f || pull.expansion <= 0f) return Offset.Zero
+                if (available.y >= 0f || pull.expansion <= 0f) return Offset.Zero
                 drag(available.y)
                 return Offset(0f, available.y)
             }
@@ -341,13 +355,18 @@ private fun HomePager(
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                if (pull.expansion <= 0f && !pull.expanded) return Velocity.Zero
+                if (pull.latched) {
+                    pull.latched = false
+                    return available
+                }
+                val rest = if (pull.expanded) 1f else 0f
+                if (pull.expansion == rest) return Velocity.Zero
+                // Short of the threshold it springs back, unless flung
                 val velocity = available.y / pullRangePx
                 val target = when {
-                    velocity > PULL_FLING -> 1f
-                    velocity < -PULL_FLING -> 0f
-                    pull.expanded -> if (pull.expansion > 1f - PULL_THRESHOLD) 1f else 0f
-                    else -> if (pull.expansion > PULL_THRESHOLD) 1f else 0f
+                    !pull.expanded && velocity > PULL_FLING -> 1f
+                    pull.expanded && velocity < -PULL_FLING -> 0f
+                    else -> rest
                 }
                 pull.settle(scope, target, velocity)
                 return available
@@ -443,11 +462,17 @@ private val RING_COLLAPSED_SIZE = 150.dp
 
 private fun ringSize(collapse: Float) = lerp(RING_SIZE, RING_COLLAPSED_SIZE, collapse)
 
-/** How far to pull for the full view of the ring. */
-private val PULL_RANGE = 280.dp
+/** Finger travel that would make the whole way into the full view of the ring without weight. */
+private val PULL_RANGE = 240.dp
 
-/** Share of the pull past which a release snaps into the full view (or back out of it). */
-private const val PULL_THRESHOLD = 0.35f
+/** Share of the way into (or out of) the full view that follows the finger; then it snaps. */
+private const val PULL_FOLLOW = 0.2f
+
+/** Makes the pull heavy: the view moves this much per finger travel, less towards the threshold. */
+private const val PULL_WEIGHT = 0.45f
+
+/** Speed (full views per second) the view snaps away with at the threshold. */
+private const val SNAP_VELOCITY = 2f
 
 /** Pull ranges per second that snap on their own, whatever the distance. */
 private const val PULL_FLING = 1.5f
@@ -462,6 +487,9 @@ private class PullState {
         private set
 
     var animation: Job? = null
+
+    /** It snapped during the current gesture, which then does nothing more. */
+    var latched = false
 
     fun settle(scope: CoroutineScope, target: Float, velocity: Float) {
         expanded = target == 1f
