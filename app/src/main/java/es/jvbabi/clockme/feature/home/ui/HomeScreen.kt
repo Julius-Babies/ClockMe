@@ -1,5 +1,6 @@
 package es.jvbabi.clockme.feature.home.ui
 
+import androidx.compose.ui.hapticfeedback.HapticFeedback
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
@@ -308,71 +309,34 @@ private fun HomePager(
     val windowWidth = with(density) { LocalWindowInfo.current.containerSize.width.toDp() }
     val hugeRingSize = maxOf(RING_SIZE, windowWidth - 24.dp)
     val pullRangePx = with(density) { PULL_RANGE.toPx() }
-    val pull = remember { PullState() }
     val scope = rememberCoroutineScope()
+    val pull = remember { PullState(scope) }
     val pullConnection = remember(pullRangePx) {
         object : NestedScrollConnection {
             fun atTop() = listStates[pagerState.currentPage]?.canScrollBackward == false
 
-            /**
-             * Only the first stretch follows the finger, and heavily; at its end the view springs
-             * the rest of the way on its own, and the rest of the gesture is ignored.
-             */
-            fun drag(delta: Float) {
-                pull.animation?.cancel()
-                val rest = if (pull.expanded) 1f else 0f
-                val before = pull.expansion
-                // How far into the stretch, 0 at rest and 1 at the threshold
-                val progress = abs(before - rest) / PULL_FOLLOW
-                val weight = PULL_WEIGHT * (1f - 0.5f * progress.coerceAtMost(1f))
-                // Pulling further into the full view only gives a little
-                val beyond = pull.expanded && delta > 0f
-                val step = delta / pullRangePx * if (beyond) PULL_WEIGHT * 0.15f else weight
-                pull.expansion = (before + step).coerceIn(0f, 1f + PULL_FOLLOW / 2f)
-                if (abs(pull.expansion - rest) >= PULL_FOLLOW && !beyond) {
-                    haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                    pull.latched = true
-                    // Leaves with some speed of its own, towards the other side
-                    pull.settle(scope, 1f - rest, if (rest == 0f) SNAP_VELOCITY else -SNAP_VELOCITY)
-                }
-            }
-
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 if (source != NestedScrollSource.UserInput) return Offset.Zero
-                // Once it snapped, the gesture is spent
-                if (pull.latched) return available.copy(x = 0f)
-                // Pushing up first takes the view back before anything scrolls
-                if (available.y >= 0f || pull.expansion <= 0f) return Offset.Zero
-                drag(available.y)
+                // In the full view, or while pulled, the pull takes everything; otherwise only
+                // pushing back up undoes the pull before anything scrolls
+                if (!pull.expanded && (available.y >= 0f || pull.offset <= 0f)) return Offset.Zero
+                pull.drag(available.y / pullRangePx, haptics)
                 return Offset(0f, available.y)
             }
 
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
                 if (source != NestedScrollSource.UserInput || available.y <= 0f || !atTop()) return Offset.Zero
-                drag(available.y)
+                pull.drag(available.y / pullRangePx, haptics)
                 return Offset(0f, available.y)
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                if (pull.latched) {
-                    pull.latched = false
-                    return available
-                }
-                val rest = if (pull.expanded) 1f else 0f
-                if (pull.expansion == rest) return Velocity.Zero
-                // Short of the threshold it springs back, unless flung
-                val velocity = available.y / pullRangePx
-                val target = when {
-                    !pull.expanded && velocity > PULL_FLING -> 1f
-                    pull.expanded && velocity < -PULL_FLING -> 0f
-                    else -> rest
-                }
-                pull.settle(scope, target, velocity)
+                if (!pull.release(available.y / pullRangePx)) return Velocity.Zero
                 return available
             }
         }
     }
-    BackHandler(enabled = pull.expanded) { pull.settle(scope, 0f, 0f) }
+    BackHandler(enabled = pull.expanded) { pull.toggle(expand = false) }
     val expansion = pull.expansion.coerceAtLeast(0f)
     val shownRingSize = if (expansion > 0f) lerp(RING_SIZE, hugeRingSize, expansion) else ringSize(collapse)
 
@@ -385,8 +349,9 @@ private fun HomePager(
     var screenHeight by remember { mutableStateOf(0.dp) }
     val fullCardHeight = screenHeight - topInset - headerHeight - LocalBottomNavBarHeight.current - 8.dp
     val fullViewGap = ((fullCardHeight - (cardExpandedHeight - RING_SIZE) - hugeRingSize) / 2).coerceAtLeast(0.dp)
-    val ringGap = fullViewGap * expansion
-    val fullViewGrowPx = with(density) { (hugeRingSize - RING_SIZE + fullViewGap * 2).toPx() }
+    val ringGap = fullViewGap * pull.centering
+    val growPx = with(density) { (hugeRingSize - RING_SIZE).toPx() }
+    val gapPx = with(density) { fullViewGap.toPx() }
 
     Box(
         Modifier
@@ -412,7 +377,7 @@ private fun HomePager(
                 // The events move down with the growing ring and fade away
                 modifier = Modifier.graphicsLayer {
                     val e = pull.expansion.coerceAtLeast(0f)
-                    translationY = fullViewGrowPx * e
+                    translationY = growPx * e + 2f * gapPx * pull.centering.coerceAtLeast(0f)
                     alpha = (1f - 1.5f * e).coerceIn(0f, 1f)
                 },
             )
@@ -490,33 +455,99 @@ private const val SNAP_VELOCITY = 2f
 /** Pull ranges per second that snap on their own, whatever the distance. */
 private const val PULL_FLING = 1.5f
 
-/** The pull into the full view of the ring: 0 normal, 1 full view, a bit more while overpulled. */
+/**
+ * The pull into the full view of the ring, a switch to fidget with: each side has a heavy stretch
+ * that follows the finger; past it the view springs to the other side, still under the finger, so
+ * it can be flipped back and forth without letting go. Centering in the full view waits for the
+ * release.
+ */
 @Stable
-private class PullState {
-    var expansion by mutableFloatStateOf(0f)
+private class PullState(private val scope: CoroutineScope) {
+    /** Where the view springs to: 0 normal, 1 full view. */
+    private var base by mutableFloatStateOf(0f)
 
-    /** Whether it rests (or springs towards) the full view. */
+    /** What the finger adds on top of [base], within the stretch. */
+    var offset by mutableFloatStateOf(0f)
+        private set
+
+    /** 0 normal, 1 full view, a bit beyond while overpulled or springing. */
+    val expansion get() = base + offset
+
+    /** How far the full view is centered, after the release. */
+    var centering by mutableFloatStateOf(0f)
+        private set
+
     var expanded by mutableStateOf(false)
         private set
 
-    var animation: Job? = null
+    /** The current gesture went to the pull, so its fling does too. */
+    private var dragging = false
+    private var baseJob: Job? = null
+    private var offsetJob: Job? = null
+    private var centeringJob: Job? = null
 
-    /** It snapped during the current gesture, which then does nothing more. */
-    var latched = false
+    /** [delta] in pull ranges. */
+    fun drag(delta: Float, haptics: HapticFeedback) {
+        dragging = true
+        offsetJob?.cancel()
+        // Pushing further into the full view only gives a little
+        val beyond = expanded && delta > 0f
+        val progress = (abs(offset) / PULL_FOLLOW).coerceAtMost(1f)
+        val weight = if (beyond) PULL_WEIGHT * 0.15f else PULL_WEIGHT * (1f - 0.5f * progress)
+        offset = if (expanded) {
+            (offset + delta * weight).coerceAtMost(PULL_FOLLOW / 2f)
+        } else {
+            (offset + delta * weight).coerceAtLeast(0f)
+        }
+        val flip = if (expanded) offset <= -PULL_FOLLOW else offset >= PULL_FOLLOW
+        if (flip) {
+            haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+            toggle(expand = !expanded)
+        }
+    }
 
-    fun settle(scope: CoroutineScope, target: Float, velocity: Float) {
-        expanded = target == 1f
-        animation?.cancel()
-        animation = scope.launch {
+    /** Ends the gesture; returns whether it was a pull. [velocity] in pull ranges per second. */
+    fun release(velocity: Float): Boolean {
+        if (!dragging) return false
+        dragging = false
+        when {
+            !expanded && velocity > PULL_FLING -> toggle(expand = true)
+            expanded && velocity < -PULL_FLING -> toggle(expand = false)
+        }
+        offsetJob?.cancel()
+        offsetJob = scope.launch {
+            animate(offset, 0f, animationSpec = PULL_SPRING) { value, _ -> offset = value }
+        }
+        if (expanded) animateCentering(1f)
+        return true
+    }
+
+    /** Springs to the other side; whatever the finger had pulled moves into the spring. */
+    fun toggle(expand: Boolean) {
+        expanded = expand
+        base += offset
+        offset = 0f
+        baseJob?.cancel()
+        baseJob = scope.launch {
             animate(
-                initialValue = expansion,
-                targetValue = target,
-                initialVelocity = velocity,
-                animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
-            ) { value, _ -> expansion = value }
+                initialValue = base,
+                targetValue = if (expand) 1f else 0f,
+                initialVelocity = if (expand) SNAP_VELOCITY else -SNAP_VELOCITY,
+                animationSpec = PULL_SPRING,
+            ) { value, _ -> base = value }
+        }
+        if (!expand) animateCentering(0f)
+    }
+
+    private fun animateCentering(target: Float) {
+        centeringJob?.cancel()
+        centeringJob = scope.launch {
+            animate(centering, target, animationSpec = PULL_SPRING) { value, _ -> centering = value }
         }
     }
 }
+
+private val PULL_SPRING = spring<Float>(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow)
 
 /**
  * The ring of [page] with the page navigator below it. Lies flat on the page at first; with
