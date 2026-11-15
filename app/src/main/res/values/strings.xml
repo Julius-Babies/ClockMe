@@ -16,7 +16,6 @@
     <string name="home_last_event_sync">Last updated %1$s</string>
 
     <string name="home_shortcut_today">Today</string>
-    <string name="home_shortcut_yesterday">Yesterday</string>
     <string name="home_shortcut_this_week">This week</string>
     <string name="home_shortcut_last_week">Last week</string>
     <string name="home_shortcut_this_month">This month</string>

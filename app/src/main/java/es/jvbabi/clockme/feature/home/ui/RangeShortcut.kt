@@ -51,7 +51,6 @@ enum class PageUnit {
  */
 enum class RangeShortcut(val unit: PageUnit?, val anchorOffset: Int = 0) {
     TODAY(PageUnit.DAY),
-    YESTERDAY(PageUnit.DAY, anchorOffset = -1),
     THIS_WEEK(PageUnit.WEEK),
     LAST_WEEK(PageUnit.WEEK, anchorOffset = -1),
     THIS_MONTH(PageUnit.MONTH),

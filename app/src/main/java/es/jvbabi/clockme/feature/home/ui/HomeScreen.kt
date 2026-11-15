@@ -15,7 +15,6 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -48,6 +47,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -288,46 +288,47 @@ private fun HomePager(
                 introKey = uiState.selectedShortcut,
             )
         }
-        // Keeps the status bar clear of content scrolling below it
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(topInset)
-                .background(MaterialTheme.colorScheme.surface),
-        )
         FloatingHeader(
             floating = scrolled,
             modifier = Modifier
                 .padding(top = topInset)
                 .onSizeChanged { headerHeight = with(density) { it.height.toDp() } },
-        ) {
+        ) { progress ->
             ShortcutSelector(
                 shortcuts = uiState.shortcuts,
                 selected = uiState.selectedShortcut,
                 onSelect = onShortcutSelect,
+                compactness = progress,
             )
         }
     }
 }
 
 /**
- * Lies flat on the page until [floating]; then it lifts off with a shadow and turns into a pill
- * with some space to the sides. Its own size never changes, so the content below stays put.
+ * Lies flat on the page until [floating]; then it lifts off as a pill in the background color, held
+ * by a soft shadow and a hairline. [content] gets how far it has lifted, to tighten up inside.
+ * Its own size never changes, so the content below stays put.
  */
 @Composable
-private fun FloatingHeader(floating: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+private fun FloatingHeader(
+    floating: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable (progress: Float) -> Unit,
+) {
     val progress by animateFloatAsState(if (floating) 1f else 0f, label = "header float")
     val colors = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(percent = (50 * progress).roundToInt())
     Box(modifier.fillMaxWidth().height(HEADER_HEIGHT)) {
         Surface(
-            shape = RoundedCornerShape(percent = (50 * progress).roundToInt()),
-            color = lerp(colors.surface, colors.surfaceContainer, progress),
-            shadowElevation = 6.dp * progress,
+            shape = shape,
+            color = colors.background,
+            shadowElevation = 8.dp * progress,
+            border = BorderStroke(Dp.Hairline, colors.outlineVariant.copy(alpha = 0.6f * progress)),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 12.dp * progress, vertical = 4.dp * progress),
+                .padding(horizontal = 16.dp * progress, vertical = 6.dp * progress),
         ) {
-            Box(contentAlignment = Alignment.CenterStart) { content() }
+            Box(contentAlignment = Alignment.CenterStart) { content(progress) }
         }
     }
 }
@@ -515,14 +516,17 @@ private fun ShortcutSelector(
     shortcuts: List<RangeShortcut>,
     selected: RangeShortcut?,
     onSelect: (RangeShortcut) -> Unit,
+    compactness: Float = 0f,
 ) {
+    // In the pill the labels shrink a little and keep away from its rounded ends
     Row(
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp - 2.dp * compactness),
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .testTag(HomeTestTags.SHORTCUTS)
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp + 4.dp * compactness),
     ) {
         shortcuts.forEach { shortcut ->
             key(shortcut) {
@@ -530,6 +534,7 @@ private fun ShortcutSelector(
                     label = stringResource(shortcut.label),
                     selected = shortcut == selected,
                     onClick = { onSelect(shortcut) },
+                    textScale = 1f - 0.2f * compactness,
                     modifier = Modifier.alignByBaseline(),
                 )
             }
@@ -544,6 +549,7 @@ private fun ShortcutText(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    textScale: Float = 1f,
 ) {
     val color by animateColorAsState(
         if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
@@ -551,7 +557,7 @@ private fun ShortcutText(
     )
     val scale by animateFloatAsState(if (selected) 1f else 0.75f, label = "scale")
     val baseStyle = MaterialTheme.typography.headlineSmall
-    val style = baseStyle.copy(fontSize = baseStyle.fontSize * scale)
+    val style = baseStyle.copy(fontSize = baseStyle.fontSize * scale * textScale)
 
     Box(
         modifier.selectable(
@@ -583,7 +589,6 @@ private fun ShortcutText(
 private val RangeShortcut.label: Int
     get() = when (this) {
         RangeShortcut.TODAY -> R.string.home_shortcut_today
-        RangeShortcut.YESTERDAY -> R.string.home_shortcut_yesterday
         RangeShortcut.THIS_WEEK -> R.string.home_shortcut_this_week
         RangeShortcut.LAST_WEEK -> R.string.home_shortcut_last_week
         RangeShortcut.THIS_MONTH -> R.string.home_shortcut_this_month

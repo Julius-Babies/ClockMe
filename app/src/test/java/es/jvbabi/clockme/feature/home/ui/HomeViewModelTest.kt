@@ -152,11 +152,12 @@ class HomeViewModelTest {
         assertEquals(RangeShortcut.available(today), viewModel.uiState.value.shortcuts)
         assertEquals(RangeShortcut.TODAY, viewModel.uiState.value.selectedShortcut)
 
-        viewModel.onShortcutSelect(RangeShortcut.YESTERDAY)
+        viewModel.onShortcutSelect(RangeShortcut.LAST_WEEK)
 
-        assertEquals(RangeShortcut.YESTERDAY, viewModel.uiState.value.selectedShortcut)
+        // Monday to Monday of the week before
+        assertEquals(RangeShortcut.LAST_WEEK, viewModel.uiState.value.selectedShortcut)
         assertEquals(
-            ResolvedTimeRange(at("00:00") - 24.hours, at("00:00")),
+            ResolvedTimeRange(at("00:00") - (10 * 24).hours, at("00:00") - (3 * 24).hours),
             viewModel.uiState.value.range,
         )
         assertEquals(emptyList<Long>(), viewModel.uiState.value.events.map { it.eventId })

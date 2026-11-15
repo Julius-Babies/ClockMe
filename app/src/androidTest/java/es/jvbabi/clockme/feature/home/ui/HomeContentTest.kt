@@ -211,7 +211,7 @@ class HomeContentTest {
         setContent(state)
 
         compose.onNodeWithText(string(R.string.home_shortcut_today)).assertIsSelected()
-        compose.onNodeWithText(string(R.string.home_shortcut_yesterday)).assertIsNotSelected()
+        compose.onNodeWithText(string(R.string.home_shortcut_this_week)).assertIsNotSelected()
         // The row scrolls, the last one may be off screen
         compose.onNodeWithText(string(R.string.home_shortcut_all)).performScrollTo().assertIsDisplayed()
     }
@@ -220,9 +220,9 @@ class HomeContentTest {
     fun tappingShortcutSelectsIt() {
         setContent(state)
 
-        compose.onNodeWithText(string(R.string.home_shortcut_yesterday)).performClick()
+        compose.onNodeWithText(string(R.string.home_shortcut_this_week)).performClick()
 
-        assertEquals(listOf(RangeShortcut.YESTERDAY), shortcuts)
+        assertEquals(listOf(RangeShortcut.THIS_WEEK), shortcuts)
     }
 
     @Test

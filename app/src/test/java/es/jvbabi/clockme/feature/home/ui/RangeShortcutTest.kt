@@ -20,7 +20,6 @@ class RangeShortcutTest {
     fun shortcutsAreWholeUnits() {
         // The current ones are capped at now once resolved
         assertEquals(TimeRangeFilter(startOf("2026-11-12"), startOf("2026-11-13")), RangeShortcut.TODAY.toFilter(today, berlin))
-        assertEquals(TimeRangeFilter(startOf("2026-11-11"), startOf("2026-11-12")), RangeShortcut.YESTERDAY.toFilter(today, berlin))
         assertEquals(TimeRangeFilter(startOf("2026-11-09"), startOf("2026-11-16")), RangeShortcut.THIS_WEEK.toFilter(today, berlin))
         assertEquals(TimeRangeFilter(startOf("2026-11-01"), startOf("2026-12-01")), RangeShortcut.THIS_MONTH.toFilter(today, berlin))
         assertEquals(TimeRangeFilter(startOf("1970-01-01"), startOf("2026-11-13")), RangeShortcut.ALL.toFilter(today, berlin))
@@ -61,7 +60,7 @@ class RangeShortcutTest {
     @Test
     fun thisWeekAndThisMonthMidWeekAndMidMonth() {
         assertEquals(
-            listOf(RangeShortcut.TODAY, RangeShortcut.YESTERDAY, RangeShortcut.THIS_WEEK, RangeShortcut.THIS_MONTH, RangeShortcut.ALL),
+            listOf(RangeShortcut.TODAY, RangeShortcut.THIS_WEEK, RangeShortcut.THIS_MONTH, RangeShortcut.ALL),
             RangeShortcut.available(today),
         )
     }
@@ -69,7 +68,7 @@ class RangeShortcutTest {
     @Test
     fun lastWeekReplacesThisWeekOnMondays() {
         assertEquals(
-            listOf(RangeShortcut.TODAY, RangeShortcut.YESTERDAY, RangeShortcut.LAST_WEEK, RangeShortcut.THIS_MONTH, RangeShortcut.ALL),
+            listOf(RangeShortcut.TODAY, RangeShortcut.LAST_WEEK, RangeShortcut.THIS_MONTH, RangeShortcut.ALL),
             RangeShortcut.available(LocalDate.parse("2026-11-09")),
         )
     }
@@ -78,7 +77,7 @@ class RangeShortcutTest {
     fun lastMonthReplacesThisMonthOnTheFirst() {
         // A Sunday
         assertEquals(
-            listOf(RangeShortcut.TODAY, RangeShortcut.YESTERDAY, RangeShortcut.THIS_WEEK, RangeShortcut.LAST_MONTH, RangeShortcut.ALL),
+            listOf(RangeShortcut.TODAY, RangeShortcut.THIS_WEEK, RangeShortcut.LAST_MONTH, RangeShortcut.ALL),
             RangeShortcut.available(LocalDate.parse("2026-11-01")),
         )
     }
