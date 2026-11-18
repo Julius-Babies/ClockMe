@@ -253,14 +253,14 @@ class ReportPdfRenderer(private val labels: ReportLabels) {
 
     private fun drawLegendEntry(canvas: Canvas, calendar: ReportCalendar, total: Duration, y: Float) {
         val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = calendar.color }
-        canvas.drawCircle(LEGEND_X + 4f, y, 4f, dotPaint)
+        canvas.drawCircle(LEGEND_X + 3.5f, y, 3.5f, dotPaint)
         val percent = if (total > Duration.ZERO) (calendar.duration / total * 100).roundToInt() else 0
         val value = "${labels.duration(calendar.duration)}  ·  $percent %"
         val right = (PAGE_WIDTH - MARGIN).toFloat()
-        canvas.drawText(value, right, y + 3.5f, legendValuePaint)
-        val nameWidth = right - legendValuePaint.measureText(value) - 12f - (LEGEND_X + 14f)
+        canvas.drawText(value, right, y + 3.3f, legendValuePaint)
+        val nameWidth = right - legendValuePaint.measureText(value) - 12f - (LEGEND_X + 13f)
         val name = TextUtils.ellipsize(calendar.name, legendNamePaint, nameWidth, TextUtils.TruncateAt.END)
-        canvas.drawText(name.toString(), LEGEND_X + 14f, y + 3.5f, legendNamePaint)
+        canvas.drawText(name.toString(), LEGEND_X + 13f, y + 3.3f, legendNamePaint)
     }
 
     private fun drawEventRow(canvas: Canvas, event: ReportEvent, y: Float) {
@@ -309,7 +309,7 @@ class ReportPdfRenderer(private val labels: ReportLabels) {
          */
         const val GRAZE_CLEARANCE = 7f
         const val LEGEND_X = MARGIN + 2 * (RING_RADIUS + BAND_OUTSET) + 64f
-        const val LEGEND_ROW = 22f
+        const val LEGEND_ROW = 15f
 
         const val ARROW_LENGTH = 14f
         const val ARROW_HEAD = 4.5f
@@ -342,8 +342,8 @@ class ReportPdfRenderer(private val labels: ReportLabels) {
         val dayPaint = textPaint(10f, bold = true)
         val ringTotalPaint = textPaint(15f, bold = true, align = Paint.Align.CENTER)
         val ringCaptionPaint = textPaint(7f, SECONDARY_COLOR, align = Paint.Align.CENTER)
-        val legendNamePaint = textPaint(10f)
-        val legendValuePaint = textPaint(10f, SECONDARY_COLOR, align = Paint.Align.RIGHT)
+        val legendNamePaint = textPaint(9.5f)
+        val legendValuePaint = textPaint(9.5f, SECONDARY_COLOR, align = Paint.Align.RIGHT)
         val rowTimePaint = textPaint(9.5f)
         val rowTitlePaint = textPaint(9.5f)
         val rowSecondaryPaint = textPaint(9f, SECONDARY_COLOR)
