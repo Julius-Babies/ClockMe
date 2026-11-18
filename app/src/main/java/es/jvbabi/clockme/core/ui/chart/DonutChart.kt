@@ -139,8 +139,8 @@ fun DonutChart(
     val groupColors = groups.associate { it.id to it.color }
     // Room for the bands only if there are groups, so the ring keeps its size otherwise
     val hasGroups = groups.isNotEmpty()
-    // Slices that left are kept until they have shrunk away
-    val ids = (shownSlices.map { it.id } + values.keys).distinct()
+    // Slices that left are kept where they were until they have shrunk away
+    val ids = rememberStableOrder(shownSlices.map { it.id }, values.keys)
 
     val selection = ids.associateWith { id ->
         key(id) {
@@ -222,9 +222,10 @@ fun DonutChart(
                 )
             }
             if (total <= 0f || fill <= 0f) return@Canvas
-            val visibleSlices = ids.count { (values[it] ?: 0f) > 0f }
-            val gap = if (visibleSlices > 1) GAP_DEGREES else 0f
             val totalSweep = 360f * intro.value * fill
+            // The gap around a slice grows and shrinks with it and with the rest of the ring,
+            // so it never opens or closes at once while slices come or go
+            fun gapOf(sweep: Float) = minOf(GAP_DEGREES, sweep / 2f, (totalSweep - sweep) / 2f).coerceAtLeast(0f)
 
             rotate(INTRO_ROTATION_DEGREES * (1f - intro.value), geometry.center) {
                 // Unfolds clockwise from the top
@@ -245,6 +246,7 @@ fun DonutChart(
                     val width = stroke + geometry.extra * selected
                     // Grow outwards only, the inner edge stays
                     val radius = ringRadius + geometry.extra * selected / 2f
+                    val gap = gapOf(sweep)
                     drawArc(
                         color = (colors[id] ?: Color.Gray).copy(alpha = alpha),
                         startAngle = angle + gap / 2f,
@@ -271,6 +273,7 @@ fun DonutChart(
                     // Fades with the slices when something outside the group is selected
                     val dimmed = hasSelection && highlightedGroup != groupId
                     val alpha = if (dimmed) lerp(1f, DIMMED_ALPHA, selectionStrength) else 1f
+                    val gap = gapOf(end - start)
                     drawArc(
                         color = (groupColors[groupId] ?: Color.Gray).copy(alpha = alpha),
                         startAngle = start + gap / 2f,
@@ -321,6 +324,33 @@ private fun animatedValues(slices: List<DonutSlice>, animate: Boolean): Map<Long
         from = to
     }
     return current()
+}
+
+/**
+ * The order to draw the slices in: that of [current], with the [leaving] ones still at the place
+ * they had, right after the slice they followed before, so they shrink away where they were.
+ */
+@Composable
+private fun rememberStableOrder(current: List<Long>, leaving: Set<Long>): List<Long> {
+    val previous = remember { mutableListOf<Long>() }
+    val order = stableOrder(previous, current, leaving)
+    previous.clear()
+    previous.addAll(order)
+    return order
+}
+
+internal fun stableOrder(previous: List<Long>, current: List<Long>, leaving: Collection<Long>): List<Long> {
+    val gone = leaving.filter { it !in current }.toSet()
+    if (gone.isEmpty()) return current
+    val order = current.toMutableList()
+    previous.forEachIndexed { index, id ->
+        if (id !in gone) return@forEachIndexed
+        // After the nearest slice before it that is still drawn, or first if there is none
+        val before = previous.subList(0, index).lastOrNull { it in order }
+        order.add(if (before == null) 0 else order.indexOf(before) + 1, id)
+    }
+    // Leaving slices the previous order did not know yet go last
+    return order + gone.filter { it !in order }
 }
 
 /** Groups by slice id, remembering the ones of removed slices for their exit animation. */
