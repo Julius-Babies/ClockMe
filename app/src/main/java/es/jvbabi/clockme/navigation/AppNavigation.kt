@@ -34,6 +34,7 @@ import androidx.navigation3.ui.NavDisplay
 import es.jvbabi.clockme.feature.calendars.ui.CalendarsScreen
 import es.jvbabi.clockme.feature.home.ui.HomeScreen
 import es.jvbabi.clockme.feature.onboarding.ui.OnboardingRequestPermissionScreen
+import es.jvbabi.clockme.feature.reports.ui.ReportsScreen
 
 /**
  * Between two tabs the pages fade into each other: they sit side by side in the bottom bar, not
@@ -73,10 +74,14 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                     entry<Screen.Home>(metadata = TAB_TRANSITION) {
                         HomeScreen(
                             onNavigateToOnboarding = { backStack.replaceAll(Screen.OnboardingRequestPermission) },
+                            onNavigateToCalendars = { backStack.navigateTo(Screen.Calendars) },
                         )
                     }
-                    entry<Screen.Calendars>(metadata = TAB_TRANSITION) {
-                        CalendarsScreen()
+                    entry<Screen.Reports>(metadata = TAB_TRANSITION) {
+                        ReportsScreen()
+                    }
+                    entry<Screen.Calendars> {
+                        CalendarsScreen(onBack = { backStack.removeLastOrNull() })
                     }
                     entry<Screen.OnboardingRequestPermission> {
                         OnboardingRequestPermissionScreen(

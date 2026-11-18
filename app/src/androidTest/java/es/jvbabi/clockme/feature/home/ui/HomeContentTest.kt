@@ -68,6 +68,7 @@ class HomeContentTest {
                     onClearSelection = { selectionsCleared++ },
                     onShortcutSelect = { shortcuts += it },
                     onPageChange = { pageChanges += it },
+                    onOpenSettings = {},
                 )
             }
         }

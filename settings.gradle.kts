@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ClockMe"
+rootProject.name = "Rings"
 include(":app")

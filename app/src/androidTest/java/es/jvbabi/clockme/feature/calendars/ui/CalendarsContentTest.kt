@@ -44,7 +44,7 @@ class CalendarsContentTest {
     private fun setContent(state: CalendarsUiState) {
         compose.setContent {
             ClockMeTheme(dynamicColor = false) {
-                CalendarsContent(uiState = state, onAction = { actions += it })
+                CalendarsContent(uiState = state, onAction = { actions += it }, onBack = {})
             }
         }
     }

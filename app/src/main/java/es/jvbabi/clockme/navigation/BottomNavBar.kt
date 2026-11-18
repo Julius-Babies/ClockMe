@@ -33,9 +33,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.phosphor.icons.PhIcons
-import com.phosphor.icons.filled.CalendarBlankFill
+import com.phosphor.icons.filled.ChartBarFill
 import com.phosphor.icons.filled.HouseFill
-import com.phosphor.icons.regular.CalendarBlank
+import com.phosphor.icons.regular.ChartBar
 import com.phosphor.icons.regular.House
 import es.jvbabi.clockme.R
 import es.jvbabi.clockme.ui.theme.ClockMeTheme
@@ -47,7 +47,7 @@ import es.jvbabi.clockme.ui.theme.ClockMeTheme
 val LocalBottomNavBarHeight = compositionLocalOf<Dp> { 0.dp }
 
 /** In the order the bar shows them. */
-private val TABS = listOf(Screen.Home, Screen.Calendars)
+private val TABS = listOf(Screen.Home, Screen.Reports)
 
 private val NAV_ITEM_WIDTH = 92.dp
 private val NAV_ITEM_HEIGHT = 64.dp
@@ -93,11 +93,11 @@ fun BottomNavBar(
                 onClick = { onSelect(Screen.Home) },
             )
             NavItem(
-                label = R.string.nav_calendars,
-                icon = PhIcons.Regular.CalendarBlank,
-                selectedIcon = PhIcons.Filled.CalendarBlankFill,
-                isSelected = selected == Screen.Calendars,
-                onClick = { onSelect(Screen.Calendars) },
+                label = R.string.nav_reports,
+                icon = PhIcons.Regular.ChartBar,
+                selectedIcon = PhIcons.Filled.ChartBarFill,
+                isSelected = selected == Screen.Reports,
+                onClick = { onSelect(Screen.Reports) },
             )
         }
     }

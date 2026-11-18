@@ -17,9 +17,12 @@ sealed interface Screen : NavKey {
     @Serializable
     data object Home : Tab
 
-    /** All calendars on the device, to pick the active ones. */
     @Serializable
-    data object Calendars : Tab
+    data object Reports : Tab
+
+    /** All calendars on the device, to pick the active ones. Opened from home's gear button. */
+    @Serializable
+    data object Calendars : Screen
 
     @Serializable
     data object OnboardingRequestPermission : Screen

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -29,6 +30,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -52,6 +54,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phosphor.icons.PhIcons
+import com.phosphor.icons.regular.ArrowLeft
 import com.phosphor.icons.regular.Check
 import com.phosphor.icons.regular.Plus
 import com.phosphor.icons.regular.Prohibit
@@ -59,22 +62,22 @@ import es.jvbabi.clockme.R
 import es.jvbabi.clockme.data.calendar.Calendar
 import es.jvbabi.clockme.data.calendar.CalendarAccount
 import es.jvbabi.clockme.data.group.CalendarGroup
-import es.jvbabi.clockme.navigation.LocalBottomNavBarHeight
 import es.jvbabi.clockme.ui.theme.ClockMeTheme
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
-fun CalendarsScreen(viewModel: CalendarsViewModel = koinViewModel()) {
+fun CalendarsScreen(onBack: () -> Unit, viewModel: CalendarsViewModel = koinViewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    CalendarsContent(uiState = uiState, onAction = viewModel::onAction)
+    CalendarsContent(uiState = uiState, onAction = viewModel::onAction, onBack = onBack)
 }
 
 @Composable
 internal fun CalendarsContent(
     uiState: CalendarsUiState,
     onAction: (CalendarsAction) -> Unit,
+    onBack: () -> Unit,
 ) {
-    Scaffold { innerPadding ->
+    Scaffold(topBar = { CalendarsTopBar(onBack) }) { innerPadding ->
         val accounts = uiState.accounts
         when {
             accounts == null -> Box(
@@ -91,17 +94,9 @@ internal fun CalendarsContent(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     top = innerPadding.calculateTopPadding(),
-                    // The bottom bar floats over the list
-                    bottom = LocalBottomNavBarHeight.current + 16.dp,
+                    bottom = innerPadding.calculateBottomPadding() + 16.dp,
                 ),
             ) {
-                item {
-                    Text(
-                        text = stringResource(R.string.calendars_title),
-                        style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-                    )
-                }
                 accounts.forEach { account ->
                     item(key = account.id) { AccountHeader(account.name) }
                     items(account.calendars, key = { it.id }) { calendar ->
@@ -142,6 +137,29 @@ internal fun CalendarsContent(
             accounts = uiState.activeAccounts,
             groupOfCalendar = uiState.groupOfCalendar,
             onAction = onAction,
+        )
+    }
+}
+
+@Composable
+private fun CalendarsTopBar(onBack: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(
+                imageVector = PhIcons.Regular.ArrowLeft,
+                contentDescription = stringResource(R.string.navigate_back),
+            )
+        }
+        Text(
+            text = stringResource(R.string.calendars_title),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(start = 4.dp),
         )
     }
 }
@@ -434,6 +452,7 @@ private fun CalendarsContentPreview() {
                 groups = listOf(CalendarGroup(id = 1, name = "University", color = GROUP_COLORS[5], calendarIds = setOf(1, 2))),
             ),
             onAction = {},
+            onBack = {},
         )
     }
 }

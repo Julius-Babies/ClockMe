@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name" translatable="false">ClockMe</string>
+    <string name="app_name" translatable="false">Rings</string>
 
     <string name="onboarding_calendar_permission_title">Calendar access</string>
     <string name="permission_action_request">Grant permission</string>
@@ -9,9 +9,13 @@
     <string name="onboarding_calendar_permission_settings_hint">Tap “Permissions”, then “Calendar”, and select “Allow”.</string>
 
     <string name="nav_home">Home</string>
-    <string name="nav_calendars">Calendars</string>
+    <string name="nav_reports">Reports</string>
 
-    <string name="home_no_active_calendars">No active calendars yet. Pick some in the Calendars tab.</string>
+    <string name="home_no_active_calendars">No active calendars yet. Pick some with the gear at the top.</string>
+    <string name="home_settings">Settings</string>
+
+    <string name="reports_title">Reports</string>
+    <string name="navigate_back">Back</string>
 
     <string name="home_last_event_sync">Last updated %1$s</string>
 

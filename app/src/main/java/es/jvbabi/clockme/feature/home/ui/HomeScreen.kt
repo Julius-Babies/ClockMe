@@ -50,11 +50,13 @@ import androidx.compose.ui.unit.Dp
 import com.phosphor.icons.PhIcons
 import com.phosphor.icons.regular.CaretLeft
 import com.phosphor.icons.regular.CaretRight
+import com.phosphor.icons.regular.Gear
 import kotlin.math.roundToInt
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.LocalDate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.draw.alpha
@@ -137,6 +139,7 @@ import kotlin.time.Instant
 @Composable
 fun HomeScreen(
     onNavigateToOnboarding: () -> Unit,
+    onNavigateToCalendars: () -> Unit,
     viewModel: HomeViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -156,6 +159,7 @@ fun HomeScreen(
         onClearSelection = viewModel::onClearSelection,
         onShortcutSelect = viewModel::onShortcutSelect,
         onPageChange = viewModel::onPageChange,
+        onOpenSettings = onNavigateToCalendars,
     )
 }
 
@@ -164,6 +168,7 @@ object HomeTestTags {
     const val SHORTCUTS = "home_shortcuts"
     const val PAGER = "home_pager"
     const val PAGE_LABEL = "home_page_label"
+    const val SETTINGS = "home_settings"
 }
 
 @Composable
@@ -174,6 +179,7 @@ internal fun HomeContent(
     onClearSelection: () -> Unit,
     onShortcutSelect: (RangeShortcut) -> Unit,
     onPageChange: (Int) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     // 0 while no back gesture is running, up to 1 while the user swipes back
     var backProgress by remember { mutableFloatStateOf(0f) }
@@ -195,14 +201,20 @@ internal fun HomeContent(
                     contentAlignment = Alignment.Center,
                 ) { CircularProgressIndicator() }
 
-                false -> Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(top = innerPadding.calculateTopPadding(), bottom = LocalBottomNavBarHeight.current)
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(stringResource(R.string.home_no_active_calendars), textAlign = TextAlign.Center)
+                false -> Box(Modifier.fillMaxSize().padding(top = innerPadding.calculateTopPadding())) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(HEADER_HEIGHT).padding(end = 4.dp),
+                        contentAlignment = Alignment.CenterEnd,
+                    ) { SettingsButton(onOpenSettings) }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(bottom = LocalBottomNavBarHeight.current)
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(stringResource(R.string.home_no_active_calendars), textAlign = TextAlign.Center)
+                    }
                 }
 
                 true -> HomePager(
@@ -214,6 +226,7 @@ internal fun HomeContent(
                     onClearSelection = onClearSelection,
                     onShortcutSelect = onShortcutSelect,
                     onPageChange = onPageChange,
+                    onOpenSettings = onOpenSettings,
                 )
             }
             LastSyncHint(
@@ -245,6 +258,7 @@ private fun HomePager(
     onClearSelection: () -> Unit,
     onShortcutSelect: (RangeShortcut) -> Unit,
     onPageChange: (Int) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val pagerState = rememberPagerState(initialPage = CURRENT_PAGE + uiState.pageOffset) { PAGE_COUNT }
 
@@ -404,12 +418,18 @@ private fun HomePager(
                 floating = scrolled,
                 modifier = Modifier.onSizeChanged { headerHeight = with(density) { it.height.toDp() } },
             ) { progress ->
-                ShortcutSelector(
-                    shortcuts = uiState.shortcuts,
-                    selected = uiState.selectedShortcut,
-                    onSelect = onShortcutSelect,
-                    compactness = progress,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Clipped, so the scrolling shortcuts pass under the edge rather than the gear
+                    Box(Modifier.weight(1f).clipToBounds(), contentAlignment = Alignment.CenterStart) {
+                        ShortcutSelector(
+                            shortcuts = uiState.shortcuts,
+                            selected = uiState.selectedShortcut,
+                            onSelect = onShortcutSelect,
+                            compactness = progress,
+                        )
+                    }
+                    SettingsButton(onOpenSettings, Modifier.padding(end = 4.dp))
+                }
             }
             shownPage?.let { page ->
                 RingCard(
@@ -675,6 +695,18 @@ private fun FloatingHeader(
 }
 
 private val HEADER_HEIGHT = 56.dp
+
+/** The gear that leads to the settings, for now the choice of calendars. */
+@Composable
+private fun SettingsButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    IconButton(onClick = onClick, modifier = modifier.testTag(HomeTestTags.SETTINGS)) {
+        Icon(
+            imageVector = PhIcons.Regular.Gear,
+            contentDescription = stringResource(R.string.home_settings),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
 
 @Composable
 private fun HomePageContent(
@@ -1145,6 +1177,7 @@ private fun HomeContentPreview() {
             onClearSelection = {},
             onShortcutSelect = {},
             onPageChange = {},
+            onOpenSettings = {},
         )
     }
 }

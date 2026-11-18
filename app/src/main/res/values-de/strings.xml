@@ -7,9 +7,13 @@
     <string name="onboarding_calendar_permission_settings_hint">Tippe auf „Berechtigungen“, dann auf „Kalender“ und wähle „Zulassen“.</string>
 
     <string name="nav_home">Start</string>
-    <string name="nav_calendars">Kalender</string>
+    <string name="nav_reports">Berichte</string>
 
-    <string name="home_no_active_calendars">Noch keine aktiven Kalender. Wähle welche im Tab „Kalender“ aus.</string>
+    <string name="home_no_active_calendars">Noch keine aktiven Kalender. Wähle welche über das Zahnrad oben aus.</string>
+    <string name="home_settings">Einstellungen</string>
+
+    <string name="reports_title">Berichte</string>
+    <string name="navigate_back">Zurück</string>
 
     <string name="home_last_event_sync">Zuletzt aktualisiert %1$s</string>
 
