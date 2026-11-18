@@ -71,13 +71,29 @@ class ReportsContentTest {
     }
 
     @Test
-    fun confirmingTheDatePickerKeepsTheShownDate() {
+    fun aPickedDateLeadsOnToItsTime() {
         setContent()
 
         compose.onNodeWithTag(ReportsTestTags.TO_DATE).performClick()
         compose.onNodeWithText(string(R.string.dialog_ok)).performClick()
+        compose.onNodeWithText(string(R.string.dialog_ok)).performClick()
 
-        assertEquals(listOf(ReportsAction.ToDateChange(LocalDate(2026, 11, 18))), actions)
+        assertEquals(
+            listOf(ReportsAction.ToDateChange(LocalDate(2026, 11, 18)), ReportsAction.ToTimeChange(LocalTime(14, 30))),
+            actions,
+        )
+    }
+
+    @Test
+    fun cancellingTheTimeAfterADateKeepsTheDate() {
+        setContent()
+
+        compose.onNodeWithTag(ReportsTestTags.FROM_DATE).performClick()
+        compose.onNodeWithText(string(R.string.dialog_ok)).performClick()
+        compose.onNodeWithText(string(R.string.dialog_cancel)).performClick()
+
+        assertEquals(listOf(ReportsAction.FromDateChange(LocalDate(2026, 11, 18))), actions)
+        compose.onNodeWithText(string(R.string.dialog_ok)).assertDoesNotExist()
     }
 
     @Test

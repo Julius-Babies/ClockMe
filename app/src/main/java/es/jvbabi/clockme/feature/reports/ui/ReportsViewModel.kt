@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.toLocalDateTime
@@ -59,11 +60,11 @@ class ReportsViewModel(
     }
 
     internal companion object {
-        /** Today so far: from midnight up to the current minute. */
+        /** This month so far: from midnight on its first up to the current minute. */
         fun initialState(timeProvider: TimeProvider): ReportsUiState {
             val now = timeProvider.now().toLocalDateTime(timeProvider.timeZone())
             return ReportsUiState(
-                from = LocalDateTime(now.date, LocalTime(0, 0)),
+                from = LocalDateTime(LocalDate(now.year, now.month, 1), LocalTime(0, 0)),
                 to = LocalDateTime(now.date, LocalTime(now.hour, now.minute)),
             )
         }

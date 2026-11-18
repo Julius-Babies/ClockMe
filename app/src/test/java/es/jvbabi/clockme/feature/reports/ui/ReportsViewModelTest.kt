@@ -41,10 +41,10 @@ class ReportsViewModelTest {
     private fun viewModel() = ReportsViewModel(FakeTimeProvider(now, berlin), calendarRepository, groupRepository)
 
     @Test
-    fun startsWithTodaySoFar() {
+    fun startsWithThisMonthSoFar() {
         val state = viewModel().uiState.value
 
-        assertEquals(LocalDateTime.parse("2026-11-18T00:00"), state.from)
+        assertEquals(LocalDateTime.parse("2026-11-01T00:00"), state.from)
         assertEquals(LocalDateTime.parse("2026-11-18T14:37"), state.to)
         assertTrue(state.isRangeValid)
     }
@@ -53,10 +53,10 @@ class ReportsViewModelTest {
     fun changingADateKeepsItsTime() {
         val viewModel = viewModel()
 
-        viewModel.onAction(ReportsAction.FromDateChange(LocalDate.parse("2026-11-01")))
+        viewModel.onAction(ReportsAction.FromDateChange(LocalDate.parse("2026-10-15")))
         viewModel.onAction(ReportsAction.ToDateChange(LocalDate.parse("2026-11-20")))
 
-        assertEquals(LocalDateTime.parse("2026-11-01T00:00"), viewModel.uiState.value.from)
+        assertEquals(LocalDateTime.parse("2026-10-15T00:00"), viewModel.uiState.value.from)
         assertEquals(LocalDateTime.parse("2026-11-20T14:37"), viewModel.uiState.value.to)
     }
 
@@ -67,7 +67,7 @@ class ReportsViewModelTest {
         viewModel.onAction(ReportsAction.FromTimeChange(LocalTime(8, 15)))
         viewModel.onAction(ReportsAction.ToTimeChange(LocalTime(17, 45)))
 
-        assertEquals(LocalDateTime.parse("2026-11-18T08:15"), viewModel.uiState.value.from)
+        assertEquals(LocalDateTime.parse("2026-11-01T08:15"), viewModel.uiState.value.from)
         assertEquals(LocalDateTime.parse("2026-11-18T17:45"), viewModel.uiState.value.to)
     }
 

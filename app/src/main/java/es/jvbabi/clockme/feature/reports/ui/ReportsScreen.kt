@@ -4,7 +4,19 @@ import android.text.format.DateFormat
 import android.text.format.DateUtils
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.TimeInput
+import androidx.compose.material3.TimePickerDialog
+import androidx.compose.material3.TimePickerDialogDefaults
+import androidx.compose.material3.TimePickerDisplayMode
+import com.phosphor.icons.regular.ArrowRight
+import com.phosphor.icons.regular.Clock
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -34,14 +46,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -118,36 +127,44 @@ internal fun ReportsContent(
                 text = stringResource(R.string.reports_title),
                 style = MaterialTheme.typography.headlineSmall,
             )
-            Surface(
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                modifier = Modifier.fillMaxWidth(),
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
             ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    RangeEndRow(
-                        label = R.string.reports_from,
-                        value = uiState.from,
-                        onDateClick = { openPicker = RangePicker.FROM_DATE },
-                        onTimeClick = { openPicker = RangePicker.FROM_TIME },
-                        dateTag = ReportsTestTags.FROM_DATE,
-                        timeTag = ReportsTestTags.FROM_TIME,
-                    )
-                    RangeEndRow(
-                        label = R.string.reports_to,
-                        value = uiState.to,
-                        onDateClick = { openPicker = RangePicker.TO_DATE },
-                        onTimeClick = { openPicker = RangePicker.TO_TIME },
-                        dateTag = ReportsTestTags.TO_DATE,
-                        timeTag = ReportsTestTags.TO_TIME,
-                    )
-                    if (!uiState.isRangeValid) {
-                        Text(
-                            text = stringResource(R.string.reports_range_invalid),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
+                RangeEndTile(
+                    label = R.string.reports_from,
+                    value = uiState.from,
+                    isError = !uiState.isRangeValid,
+                    onClick = { openPicker = RangePicker.FROM_DATE },
+                    onTimeClick = { openPicker = RangePicker.FROM_TIME },
+                    tag = ReportsTestTags.FROM_DATE,
+                    timeTag = ReportsTestTags.FROM_TIME,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
+                Icon(
+                    imageVector = PhIcons.Regular.ArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 8.dp).size(20.dp),
+                )
+                RangeEndTile(
+                    label = R.string.reports_to,
+                    value = uiState.to,
+                    isError = !uiState.isRangeValid,
+                    onClick = { openPicker = RangePicker.TO_DATE },
+                    onTimeClick = { openPicker = RangePicker.TO_TIME },
+                    tag = ReportsTestTags.TO_DATE,
+                    timeTag = ReportsTestTags.TO_TIME,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
+            }
+            AnimatedVisibility(visible = !uiState.isRangeValid) {
+                Text(
+                    text = stringResource(R.string.reports_range_invalid),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
             }
             uiState.calendars?.let { tree ->
                 Text(
@@ -160,12 +177,25 @@ internal fun ReportsContent(
         }
     }
 
+    // A picked date leads straight on to its time; cancelling that keeps the new date
     val dismiss = { openPicker = null }
     when (openPicker) {
-        RangePicker.FROM_DATE -> DatePickerDialog(uiState.from.date, dismiss) { onAction(ReportsAction.FromDateChange(it)) }
-        RangePicker.FROM_TIME -> TimePickerDialog(uiState.from.time, dismiss) { onAction(ReportsAction.FromTimeChange(it)) }
-        RangePicker.TO_DATE -> DatePickerDialog(uiState.to.date, dismiss) { onAction(ReportsAction.ToDateChange(it)) }
-        RangePicker.TO_TIME -> TimePickerDialog(uiState.to.time, dismiss) { onAction(ReportsAction.ToTimeChange(it)) }
+        RangePicker.FROM_DATE -> DatePickerDialog(uiState.from.date, R.string.reports_from, dismiss) {
+            onAction(ReportsAction.FromDateChange(it))
+            openPicker = RangePicker.FROM_TIME
+        }
+        RangePicker.FROM_TIME -> TimePickerDialog(uiState.from.time, R.string.reports_from, dismiss) {
+            onAction(ReportsAction.FromTimeChange(it))
+            openPicker = null
+        }
+        RangePicker.TO_DATE -> DatePickerDialog(uiState.to.date, R.string.reports_to, dismiss) {
+            onAction(ReportsAction.ToDateChange(it))
+            openPicker = RangePicker.TO_TIME
+        }
+        RangePicker.TO_TIME -> TimePickerDialog(uiState.to.time, R.string.reports_to, dismiss) {
+            onAction(ReportsAction.ToTimeChange(it))
+            openPicker = null
+        }
         null -> Unit
     }
 }
@@ -328,64 +358,99 @@ private fun ColorDot(color: Int?, modifier: Modifier = Modifier) {
     )
 }
 
-/** One end of the range: its label, then the date and the time, each tappable to change it. */
+/**
+ * One end of the range as a tile: its label, the date large with the weekday beneath, and the
+ * time as a chip. The tile opens the date and then the time; the chip only the time.
+ */
 @Composable
-private fun RangeEndRow(
+private fun RangeEndTile(
     @StringRes label: Int,
     value: LocalDateTime,
-    onDateClick: () -> Unit,
+    isError: Boolean,
+    onClick: () -> Unit,
     onTimeClick: () -> Unit,
-    dateTag: String,
+    tag: String,
     timeTag: String,
+    modifier: Modifier = Modifier,
 ) {
+    val colors = MaterialTheme.colorScheme
     val formatTime = rememberTimeFormatter()
     val labelText = stringResource(label)
-    val dateText = rememberDateText(value.date)
+    val dateText = rememberDateText(value.date, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_YEAR or DateUtils.FORMAT_ABBREV_MONTH)
+    val weekdayText = rememberDateText(value.date, DateUtils.FORMAT_SHOW_WEEKDAY)
     val timeText = formatTime(value.time)
     val pickDate = stringResource(R.string.reports_pick_date)
     val pickTime = stringResource(R.string.reports_pick_time)
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = labelText,
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.width(40.dp),
-        )
-        FilledTonalButton(
-            onClick = onDateClick,
-            modifier = Modifier
-                .weight(1f)
-                .testTag(dateTag)
-                .semantics { contentDescription = "$labelText: $dateText, $pickDate" },
-        ) { Text(dateText, maxLines = 1) }
-        FilledTonalButton(
-            onClick = onTimeClick,
-            modifier = Modifier
-                .testTag(timeTag)
-                .semantics { contentDescription = "$labelText: $timeText, $pickTime" },
-        ) { Text(timeText, maxLines = 1) }
+    val borderColor by animateColorAsState(if (isError) colors.error else Color.Transparent, label = "tile border")
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.extraLarge,
+        color = colors.surfaceContainerHigh,
+        border = BorderStroke(1.5.dp, borderColor),
+        modifier = modifier
+            .testTag(tag)
+            .semantics { contentDescription = "$labelText: $weekdayText, $dateText, $timeText. $pickDate" },
+    ) {
+        Column(Modifier.padding(start = 16.dp, end = 12.dp, top = 14.dp, bottom = 12.dp)) {
+            Text(
+                text = labelText.uppercase(),
+                style = MaterialTheme.typography.labelMedium,
+                color = if (isError) colors.error else colors.primary,
+            )
+            Text(
+                text = dateText,
+                style = MaterialTheme.typography.titleLarge,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.padding(top = 6.dp).basicMarquee(),
+            )
+            Text(
+                text = weekdayText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.onSurfaceVariant,
+                maxLines = 1,
+            )
+            Surface(
+                onClick = onTimeClick,
+                shape = CircleShape,
+                color = colors.secondaryContainer,
+                contentColor = colors.onSecondaryContainer,
+                modifier = Modifier
+                    .padding(top = 12.dp)
+                    .testTag(timeTag)
+                    .semantics { contentDescription = "$labelText: $timeText. $pickTime" },
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(start = 10.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
+                ) {
+                    Icon(PhIcons.Regular.Clock, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Text(timeText, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                }
+            }
+        }
     }
 }
 
-/** The date in the system's short form with weekday, like "Wed, Nov 18, 2026". */
+/** The date as the system writes it, with the parts asked for by [flags] of [DateUtils]. */
 @Composable
-private fun rememberDateText(date: LocalDate): String {
+private fun rememberDateText(date: LocalDate, flags: Int): String {
     val context = LocalContext.current
-    return remember(date) {
+    return remember(date, flags) {
         val millis = date.atStartOfDayIn(TimeZone.currentSystemDefault()).toEpochMilliseconds()
-        DateUtils.formatDateTime(
-            context,
-            millis,
-            DateUtils.FORMAT_SHOW_WEEKDAY or DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_YEAR or DateUtils.FORMAT_ABBREV_ALL,
-        )
+        DateUtils.formatDateTime(context, millis, flags)
     }
 }
 
+/** [onConfirm] gets the picked date; the caller decides what follows, so the dialog does not close itself. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DatePickerDialog(
     initial: LocalDate,
+    @StringRes title: Int,
     onDismiss: () -> Unit,
-    onPick: (LocalDate) -> Unit,
+    onConfirm: (LocalDate) -> Unit,
 ) {
     // The date picker speaks in UTC midnights
     val state = rememberDatePickerState(
@@ -397,9 +462,8 @@ private fun DatePickerDialog(
             TextButton(
                 onClick = {
                     state.selectedDateMillis?.let { millis ->
-                        onPick(Instant.fromEpochMilliseconds(millis).toLocalDateTime(TimeZone.UTC).date)
+                        onConfirm(Instant.fromEpochMilliseconds(millis).toLocalDateTime(TimeZone.UTC).date)
                     }
-                    onDismiss()
                 },
                 enabled = state.selectedDateMillis != null,
             ) { Text(stringResource(R.string.dialog_ok)) }
@@ -408,37 +472,65 @@ private fun DatePickerDialog(
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.dialog_cancel)) }
         },
     ) {
-        DatePicker(state = state)
+        DatePicker(
+            state = state,
+            title = {
+                Text(
+                    text = stringResource(title),
+                    modifier = Modifier.padding(start = 24.dp, end = 12.dp, top = 16.dp),
+                )
+            },
+        )
     }
 }
 
+/** Material's time dialog, with the switch between the clock and typing the time in. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TimePickerDialog(
     initial: LocalTime,
+    @StringRes title: Int,
     onDismiss: () -> Unit,
-    onPick: (LocalTime) -> Unit,
+    onConfirm: (LocalTime) -> Unit,
 ) {
     val state = rememberTimePickerState(
         initialHour = initial.hour,
         initialMinute = initial.minute,
         is24Hour = DateFormat.is24HourFormat(LocalContext.current),
     )
-    AlertDialog(
+    var displayMode by remember { mutableStateOf(TimePickerDisplayMode.Picker) }
+    TimePickerDialog(
         onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onPick(LocalTime(state.hour, state.minute))
-                    onDismiss()
+        title = {
+            Text(
+                text = stringResource(title),
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(bottom = 20.dp),
+            )
+        },
+        modeToggleButton = {
+            TimePickerDialogDefaults.DisplayModeToggle(
+                onDisplayModeChange = {
+                    displayMode = if (displayMode == TimePickerDisplayMode.Picker) {
+                        TimePickerDisplayMode.Input
+                    } else {
+                        TimePickerDisplayMode.Picker
+                    }
                 },
-            ) { Text(stringResource(R.string.dialog_ok)) }
+                displayMode = displayMode,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(LocalTime(state.hour, state.minute)) }) {
+                Text(stringResource(R.string.dialog_ok))
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.dialog_cancel)) }
         },
-        text = { TimePicker(state = state) },
-    )
+    ) {
+        if (displayMode == TimePickerDisplayMode.Picker) TimePicker(state = state) else TimeInput(state = state)
+    }
 }
 
 @Preview(showBackground = true)
