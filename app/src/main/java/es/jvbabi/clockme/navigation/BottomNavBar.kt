@@ -38,7 +38,7 @@ import com.phosphor.icons.filled.HouseFill
 import com.phosphor.icons.regular.ChartBar
 import com.phosphor.icons.regular.House
 import es.jvbabi.clockme.R
-import es.jvbabi.clockme.ui.theme.ClockMeTheme
+import es.jvbabi.clockme.ui.theme.CirclesTheme
 
 /**
  * How much of the bottom edge the [BottomNavBar] covers, the system bar below it included. The
@@ -139,7 +139,7 @@ private fun NavItem(
 @Preview
 @Composable
 private fun BottomNavBarPreview() {
-    ClockMeTheme(dynamicColor = false) {
+    CirclesTheme(dynamicColor = false) {
         BottomNavBar(selected = Screen.Home, onSelect = {})
     }
 }

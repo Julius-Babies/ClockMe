@@ -11,7 +11,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import es.jvbabi.clockme.R
 import es.jvbabi.clockme.data.permission.PermissionStatus
-import es.jvbabi.clockme.ui.theme.ClockMeTheme
+import es.jvbabi.clockme.ui.theme.CirclesTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -28,7 +28,7 @@ class OnboardingRequestPermissionContentTest {
 
     private fun setContent(status: PermissionStatus?) {
         compose.setContent {
-            ClockMeTheme(dynamicColor = false) {
+            CirclesTheme(dynamicColor = false) {
                 OnboardingRequestPermissionContent(
                     uiState = OnboardingRequestPermissionUiState(calendarPermission = status),
                     onGrantPermissionClick = { clicks++ },
@@ -81,7 +81,7 @@ class OnboardingRequestPermissionContentTest {
             val newState = mutableStateOf<PermissionStatus?>(status)
             statusState = newState
             compose.setContent {
-                ClockMeTheme(dynamicColor = false) {
+                CirclesTheme(dynamicColor = false) {
                     OnboardingRequestPermissionContent(
                         uiState = OnboardingRequestPermissionUiState(calendarPermission = newState.value),
                         onGrantPermissionClick = { clicks++ },

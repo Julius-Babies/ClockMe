@@ -18,7 +18,7 @@ import es.jvbabi.clockme.R
 import es.jvbabi.clockme.data.calendar.Calendar
 import es.jvbabi.clockme.data.calendar.CalendarAccount
 import es.jvbabi.clockme.data.group.CalendarGroup
-import es.jvbabi.clockme.ui.theme.ClockMeTheme
+import es.jvbabi.clockme.ui.theme.CirclesTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -43,7 +43,7 @@ class CalendarsContentTest {
 
     private fun setContent(state: CalendarsUiState) {
         compose.setContent {
-            ClockMeTheme(dynamicColor = false) {
+            CirclesTheme(dynamicColor = false) {
                 CalendarsContent(uiState = state, onAction = { actions += it }, onBack = {})
             }
         }

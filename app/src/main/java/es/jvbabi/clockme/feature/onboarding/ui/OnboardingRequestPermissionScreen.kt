@@ -24,7 +24,7 @@ import es.jvbabi.clockme.R
 import es.jvbabi.clockme.core.ui.LocalAppStartState
 import es.jvbabi.clockme.core.ui.ObserveAsEvents
 import es.jvbabi.clockme.data.permission.PermissionStatus
-import es.jvbabi.clockme.ui.theme.ClockMeTheme
+import es.jvbabi.clockme.ui.theme.CirclesTheme
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -100,7 +100,7 @@ internal fun OnboardingRequestPermissionContent(
 @Preview(showBackground = true)
 @Composable
 private fun OnboardingRequestPermissionContentPreview() {
-    ClockMeTheme {
+    CirclesTheme {
         OnboardingRequestPermissionContent(
             uiState = OnboardingRequestPermissionUiState(PermissionStatus.NotRequested),
             onGrantPermissionClick = {},

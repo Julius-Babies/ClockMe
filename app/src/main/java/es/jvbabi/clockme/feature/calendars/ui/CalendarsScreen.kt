@@ -62,7 +62,7 @@ import es.jvbabi.clockme.R
 import es.jvbabi.clockme.data.calendar.Calendar
 import es.jvbabi.clockme.data.calendar.CalendarAccount
 import es.jvbabi.clockme.data.group.CalendarGroup
-import es.jvbabi.clockme.ui.theme.ClockMeTheme
+import es.jvbabi.clockme.ui.theme.CirclesTheme
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -442,7 +442,7 @@ private fun ColorOption(color: Int?, selected: Boolean, onClick: () -> Unit) {
 private fun CalendarsContentPreview() {
     val work = Calendar(id = 1, name = "Work", color = 0xFF4285F4.toInt())
     val personal = Calendar(id = 2, name = "Personal", color = 0xFF0B8043.toInt())
-    ClockMeTheme {
+    CirclesTheme {
         CalendarsContent(
             uiState = CalendarsUiState(
                 accounts = listOf(

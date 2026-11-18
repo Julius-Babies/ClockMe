@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import es.jvbabi.clockme.R
-import es.jvbabi.clockme.ui.theme.ClockMeTheme
+import es.jvbabi.clockme.ui.theme.CirclesTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Rule
@@ -60,7 +60,7 @@ class HomeContentTest {
 
     private fun setContent(state: HomeUiState) {
         compose.setContent {
-            ClockMeTheme(dynamicColor = false) {
+            CirclesTheme(dynamicColor = false) {
                 HomeContent(
                     uiState = state,
                     onCalendarSelect = { selections += it },

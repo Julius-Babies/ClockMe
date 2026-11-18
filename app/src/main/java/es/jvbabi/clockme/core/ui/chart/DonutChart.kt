@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
-import es.jvbabi.clockme.ui.theme.ClockMeTheme
+import es.jvbabi.clockme.ui.theme.CirclesTheme
 import kotlin.math.atan2
 import kotlin.math.hypot
 
@@ -414,7 +414,7 @@ private class RingGeometry(
 @Preview(showBackground = true)
 @Composable
 private fun DonutChartPreview() {
-    ClockMeTheme(dynamicColor = false) {
+    CirclesTheme(dynamicColor = false) {
         DonutChart(
             slices = listOf(
                 DonutSlice(1, 120f, Color(0xFF4285F4)),

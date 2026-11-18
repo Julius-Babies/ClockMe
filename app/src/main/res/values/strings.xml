@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name" translatable="false">Rings</string>
+    <string name="app_name" translatable="false">Circles</string>
 
     <string name="onboarding_calendar_permission_title">Calendar access</string>
     <string name="permission_action_request">Grant permission</string>

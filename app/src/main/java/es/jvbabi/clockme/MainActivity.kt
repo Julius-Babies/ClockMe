@@ -11,7 +11,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import es.jvbabi.clockme.core.ui.AppStartState
 import es.jvbabi.clockme.core.ui.LocalAppStartState
 import es.jvbabi.clockme.navigation.AppNavigation
-import es.jvbabi.clockme.ui.theme.ClockMeTheme
+import es.jvbabi.clockme.ui.theme.CirclesTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -26,7 +26,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             CompositionLocalProvider(LocalAppStartState provides appStart) {
-                ClockMeTheme {
+                CirclesTheme {
                     AppNavigation()
                 }
             }

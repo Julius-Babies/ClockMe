@@ -127,7 +127,7 @@ import es.jvbabi.clockme.core.ui.chart.DonutSlice
 import es.jvbabi.clockme.core.ui.formatDuration
 import es.jvbabi.clockme.core.ui.rememberTimeFormatter
 import es.jvbabi.clockme.navigation.LocalBottomNavBarHeight
-import es.jvbabi.clockme.ui.theme.ClockMeTheme
+import es.jvbabi.clockme.ui.theme.CirclesTheme
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.delay
@@ -1149,7 +1149,7 @@ private const val EVENT_MAX_HEIGHT_DP = 160f
 private fun HomeContentPreview() {
     val now = Instant.parse("2026-11-12T15:00:00Z")
     val today = LocalDate(2026, 11, 12)
-    ClockMeTheme(dynamicColor = false) {
+    CirclesTheme(dynamicColor = false) {
         HomeContent(
             uiState = HomeUiState(
                 shortcuts = RangeShortcut.available(today),

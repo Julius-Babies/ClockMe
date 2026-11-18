@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Rings"
+rootProject.name = "Circles"
 include(":app")

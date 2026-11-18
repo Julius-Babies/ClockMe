@@ -11,12 +11,12 @@ import org.koin.android.ext.koin.androidLogger
 import org.koin.androidx.workmanager.koin.workManagerFactory
 import org.koin.core.context.startKoin
 
-class ClockMeApp : Application() {
+class CirclesApp : Application() {
     override fun onCreate() {
         super.onCreate()
         startKoin {
             androidLogger()
-            androidContext(this@ClockMeApp)
+            androidContext(this@CirclesApp)
             workManagerFactory()
             modules(appModule)
         }
