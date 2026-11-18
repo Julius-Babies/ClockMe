@@ -6,6 +6,7 @@ import es.jvbabi.clockme.domain.di.domainModule
 import es.jvbabi.clockme.feature.calendars.di.calendarsModule
 import es.jvbabi.clockme.feature.home.di.homeModule
 import es.jvbabi.clockme.feature.onboarding.di.onboardingModule
+import es.jvbabi.clockme.feature.reports.di.reportsModule
 import es.jvbabi.clockme.sync.di.syncModule
 import org.koin.dsl.module
 
@@ -17,6 +18,7 @@ val appModule = module {
         syncModule,
         homeModule,
         calendarsModule,
+        reportsModule,
         onboardingModule,
     )
 }

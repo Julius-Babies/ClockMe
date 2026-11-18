@@ -13,6 +13,12 @@
     <string name="home_settings">Einstellungen</string>
 
     <string name="reports_title">Berichte</string>
+    <string name="reports_from">Von</string>
+    <string name="reports_to">Bis</string>
+    <string name="reports_range_invalid">Das Ende muss nach dem Anfang liegen.</string>
+    <string name="reports_pick_date">Datum wählen</string>
+    <string name="reports_pick_time">Uhrzeit wählen</string>
+    <string name="dialog_cancel">Abbrechen</string>
     <string name="navigate_back">Zurück</string>
 
     <string name="home_last_event_sync">Zuletzt aktualisiert %1$s</string>
