@@ -2,6 +2,7 @@ package es.jvbabi.clockme.feature.reports.ui
 
 import es.jvbabi.clockme.data.calendar.Calendar
 import es.jvbabi.clockme.data.calendar.CalendarAccount
+import es.jvbabi.clockme.data.calendar.EventSegment
 import es.jvbabi.clockme.data.group.CalendarGroup
 import es.jvbabi.clockme.testing.FakeCalendarGroupRepository
 import es.jvbabi.clockme.testing.FakeCalendarRepository
@@ -17,6 +18,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
 
 class ReportsViewModelTest {
 
@@ -146,5 +150,67 @@ class ReportsViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(listOf(gym, work), state.calendars!!.ungrouped)
         assertTrue(state.isSelected(work))
+    }
+
+    private fun segment(calendar: Calendar, eventId: Long, start: String, end: String) = EventSegment(
+        calendarId = calendar.id,
+        eventId = eventId,
+        date = LocalDate.parse(start.substringBefore('T')),
+        start = LocalDateTime.parse(start).toInstant(berlin),
+        end = LocalDateTime.parse(end).toInstant(berlin),
+    )
+
+    private fun ReportPreview.durationOf(calendar: Calendar): Duration? =
+        calendars.find { it.calendarId == calendar.id }?.duration
+
+    @Test
+    fun previewCountsTheTimeOfEachSelectedCalendarWithinTheSpan() {
+        calendarRepository.storedSegments.value = mapOf(
+            lectures.id to listOf(
+                segment(lectures, 1, "2026-11-02T10:00", "2026-11-02T12:00"),
+                // Ends after now, so only the part until 14:37 counts
+                segment(lectures, 2, "2026-11-18T14:00", "2026-11-18T16:00"),
+            ),
+            gym.id to listOf(segment(gym, 3, "2026-10-31T18:00", "2026-10-31T19:00")),
+        )
+
+        val preview = viewModel().uiState.value.preview!!
+
+        assertEquals(2.hours + 37.minutes, preview.durationOf(lectures))
+        assertEquals(Duration.ZERO, preview.durationOf(gym))
+        assertEquals(2.hours + 37.minutes, preview.total)
+        assertEquals(2, preview.eventCount)
+    }
+
+    @Test
+    fun previewKeepsGroupedCalendarsFirstAndLeavesOutDeselectedOnes() {
+        val viewModel = viewModel()
+
+        viewModel.onAction(ReportsAction.CalendarToggle(study.id))
+
+        val preview = viewModel.uiState.value.preview!!
+        assertEquals(listOf(lectures.id to university.id, gym.id to null), preview.calendars.map { it.calendarId to it.groupId })
+    }
+
+    @Test
+    fun previewFollowsANewSpan() {
+        calendarRepository.storedSegments.value = mapOf(
+            gym.id to listOf(segment(gym, 3, "2026-10-31T18:00", "2026-10-31T19:00")),
+        )
+        val viewModel = viewModel()
+
+        viewModel.onAction(ReportsAction.FromDateChange(LocalDate.parse("2026-10-31")))
+
+        assertEquals(1.hours, viewModel.uiState.value.preview!!.durationOf(gym))
+    }
+
+    @Test
+    fun includesEventsUntilToggledOff() {
+        val viewModel = viewModel()
+        assertTrue(viewModel.uiState.value.includeEvents)
+
+        viewModel.onAction(ReportsAction.IncludeEventsToggle)
+
+        assertFalse(viewModel.uiState.value.includeEvents)
     }
 }

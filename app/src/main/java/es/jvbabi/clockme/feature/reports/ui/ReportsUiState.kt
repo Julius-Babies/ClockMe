@@ -5,6 +5,7 @@ import es.jvbabi.clockme.data.calendar.Calendar
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
+import kotlin.time.Duration
 
 /**
  * The span a report covers, from [from] up to [to], both in the device's time zone, and which of
@@ -17,6 +18,10 @@ data class ReportsUiState(
     val calendars: ReportCalendarTree? = null,
     /** Left out rather than taken in, so a newly activated calendar is in the report right away. */
     val deselectedCalendarIds: Set<Long> = emptySet(),
+    /** Whether the report lists the single events too, not just the time per calendar. */
+    val includeEvents: Boolean = true,
+    /** `null` while it loads. */
+    val preview: ReportPreview? = null,
 ) {
     /** A report needs its end after its start. */
     val isRangeValid: Boolean get() = from < to
@@ -49,6 +54,24 @@ data class ReportGroup(
     val calendars: List<Calendar>,
 )
 
+/** The time of each selected calendar within the span, as the report will show it. */
+data class ReportPreview(
+    /** Grouped calendars first, each group's together, then those in no group. */
+    val calendars: List<PreviewCalendar>,
+    /** Events with any time in the span, each counted once even if it spans several days. */
+    val eventCount: Int,
+) {
+    val total: Duration get() = calendars.fold(Duration.ZERO) { sum, it -> sum + it.duration }
+}
+
+data class PreviewCalendar(
+    val calendarId: Long,
+    @param:ColorInt val color: Int,
+    /** Time covered by its events within the span; overlapping events count once. */
+    val duration: Duration,
+    val groupId: Long? = null,
+)
+
 enum class GroupSelection { ALL, SOME, NONE }
 
 sealed interface ReportsAction {
@@ -60,4 +83,6 @@ sealed interface ReportsAction {
 
     /** Takes in all of the group's calendars, or leaves them all out if all were in. */
     data class GroupToggle(val groupId: Long) : ReportsAction
+
+    data object IncludeEventsToggle : ReportsAction
 }

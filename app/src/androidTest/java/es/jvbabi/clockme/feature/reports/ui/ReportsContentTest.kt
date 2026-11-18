@@ -152,4 +152,13 @@ class ReportsContentTest {
 
         assertEquals(listOf(ReportsAction.CalendarToggle(gym.id)), actions)
     }
+
+    @Test
+    fun tappingTheEventsOptionTogglesIt() {
+        setContent()
+
+        compose.onNodeWithTag(ReportsTestTags.INCLUDE_EVENTS).performScrollTo().assertIsOn().performClick()
+
+        assertEquals(listOf<ReportsAction>(ReportsAction.IncludeEventsToggle), actions)
+    }
 }

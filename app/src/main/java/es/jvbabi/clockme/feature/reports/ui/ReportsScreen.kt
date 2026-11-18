@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.runtime.key
@@ -69,6 +70,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -76,6 +78,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import es.jvbabi.clockme.R
+import es.jvbabi.clockme.core.ui.chart.DonutChart
+import es.jvbabi.clockme.core.ui.chart.DonutGroup
+import es.jvbabi.clockme.core.ui.chart.DonutSlice
+import es.jvbabi.clockme.core.ui.formatDuration
 import es.jvbabi.clockme.core.ui.rememberTimeFormatter
 import es.jvbabi.clockme.navigation.LocalBottomNavBarHeight
 import es.jvbabi.clockme.ui.theme.CirclesTheme
@@ -86,6 +92,8 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
 import org.koin.androidx.compose.koinViewModel
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 
 @Composable
@@ -99,6 +107,9 @@ object ReportsTestTags {
     const val FROM_TIME = "reports_from_time"
     const val TO_DATE = "reports_to_date"
     const val TO_TIME = "reports_to_time"
+    const val PREVIEW_RING = "reports_preview_ring"
+    const val PREVIEW_TOTAL = "reports_preview_total"
+    const val INCLUDE_EVENTS = "reports_include_events"
     fun group(id: Long) = "reports_group_$id"
     fun groupCheckbox(id: Long) = "reports_group_checkbox_$id"
     fun calendar(id: Long) = "reports_calendar_$id"
@@ -174,6 +185,12 @@ internal fun ReportsContent(
                 )
                 CalendarTreeCard(uiState, tree, onAction)
             }
+            Text(
+                text = stringResource(R.string.reports_preview),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            PreviewCard(uiState, onAction)
         }
     }
 
@@ -267,6 +284,99 @@ private fun CalendarTreeCard(
         }
     }
 }
+
+/** A small ring of the selected calendars' time with the total beside it, and the report's options. */
+@Composable
+private fun PreviewCard(
+    uiState: ReportsUiState,
+    onAction: (ReportsAction) -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    val preview = uiState.preview
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = colors.surfaceContainer,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(16.dp),
+            ) {
+                DonutChart(
+                    slices = preview?.calendars.orEmpty().map {
+                        DonutSlice(
+                            id = it.calendarId,
+                            value = it.duration.inWholeSeconds.toFloat(),
+                            color = Color(it.color),
+                            groupId = it.groupId,
+                        )
+                    },
+                    groups = uiState.calendars?.groups.orEmpty().map { group ->
+                        DonutGroup(group.id, group.color?.let(::Color) ?: colors.outline)
+                    },
+                    selectedId = null,
+                    onSliceClick = {},
+                    strokeWidth = 14.dp,
+                    selectedExtraWidth = 0.dp,
+                    groupBandWidth = 3.dp,
+                    groupBandGap = 2.dp,
+                    groupTouchPadding = 0.dp,
+                    playIntro = preview != null,
+                    modifier = Modifier.size(PREVIEW_RING_SIZE).testTag(ReportsTestTags.PREVIEW_RING),
+                )
+                Column(Modifier.weight(1f).padding(start = 20.dp)) {
+                    Text(
+                        text = stringResource(R.string.home_total).uppercase(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.primary,
+                    )
+                    Text(
+                        text = formatDuration(preview?.total ?: Duration.ZERO),
+                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier.testTag(ReportsTestTags.PREVIEW_TOTAL),
+                    )
+                    if (preview != null) {
+                        val events = pluralStringResource(R.plurals.reports_event_count, preview.eventCount, preview.eventCount)
+                        val calendarCount = preview.calendars.size
+                        val calendars = pluralStringResource(R.plurals.reports_calendar_count, calendarCount, calendarCount)
+                        Text(
+                            text = "$events $calendars",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            HorizontalDivider(color = colors.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = uiState.includeEvents,
+                        role = Role.Checkbox,
+                        onValueChange = { onAction(ReportsAction.IncludeEventsToggle) },
+                    )
+                    .testTag(ReportsTestTags.INCLUDE_EVENTS)
+                    .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.reports_include_events), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = stringResource(R.string.reports_include_events_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                    )
+                }
+                // The row handles the click
+                Checkbox(checked = uiState.includeEvents, onCheckedChange = null, modifier = Modifier.padding(12.dp))
+            }
+        }
+    }
+}
+
+private val PREVIEW_RING_SIZE = 112.dp
 
 /** How far a group's calendars sit in under it: past the caret, so their dots line up with the group's. */
 private val TREE_INDENT = 40.dp
@@ -556,6 +666,13 @@ private fun ReportsContentPreview() {
                     ungrouped = listOf(Calendar(3, "Gym", 0xFFF4511E.toInt())),
                 ),
                 deselectedCalendarIds = setOf(2),
+                preview = ReportPreview(
+                    calendars = listOf(
+                        PreviewCalendar(1, 0xFF4285F4.toInt(), 14.hours, groupId = 1),
+                        PreviewCalendar(3, 0xFFF4511E.toInt(), 5.hours),
+                    ),
+                    eventCount = 23,
+                ),
             ),
             onAction = {},
         )

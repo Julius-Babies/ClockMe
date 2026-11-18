@@ -23,6 +23,17 @@
     <string name="reports_group_count">%1$d von %2$d</string>
     <string name="reports_expand_group">Kalender anzeigen</string>
     <string name="reports_collapse_group">Kalender ausblenden</string>
+    <string name="reports_preview">Vorschau</string>
+    <string name="reports_include_events">Termine einzeln auflisten</string>
+    <string name="reports_include_events_description">Jeder Termin mit seiner Zeit, nicht nur die Zeit pro Kalender</string>
+    <plurals name="reports_event_count">
+        <item quantity="one">%d Termin</item>
+        <item quantity="other">%d Termine</item>
+    </plurals>
+    <plurals name="reports_calendar_count">
+        <item quantity="one">in %d Kalender</item>
+        <item quantity="other">in %d Kalendern</item>
+    </plurals>
     <string name="dialog_cancel">Abbrechen</string>
     <string name="navigate_back">Zurück</string>
 
