@@ -6,6 +6,10 @@ import es.jvbabi.clockme.data.calendar.EventSegment
 import es.jvbabi.clockme.data.group.CalendarGroup
 import es.jvbabi.clockme.testing.FakeCalendarGroupRepository
 import es.jvbabi.clockme.testing.FakeCalendarRepository
+import es.jvbabi.clockme.feature.reports.pdf.ReportCalendar
+import es.jvbabi.clockme.feature.reports.pdf.ReportCalendarGroup
+import es.jvbabi.clockme.feature.reports.pdf.ReportDocument
+import es.jvbabi.clockme.feature.reports.pdf.ReportExporter
 import es.jvbabi.clockme.testing.FakeTimeProvider
 import es.jvbabi.clockme.testing.MainDispatcherRule
 import kotlinx.datetime.LocalDate
@@ -14,7 +18,10 @@ import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import org.junit.Assert.assertEquals
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -42,7 +49,15 @@ class ReportsViewModelTest {
     }
     private val groupRepository = FakeCalendarGroupRepository().apply { groups.value = listOf(university, empty) }
 
-    private fun viewModel() = ReportsViewModel(FakeTimeProvider(now, berlin), calendarRepository, groupRepository)
+    private val exported = mutableListOf<ReportDocument>()
+    private var exportFails = false
+    private val exporter = ReportExporter { document ->
+        if (exportFails) error("Disk full")
+        exported += document
+        "content://reports/report.pdf"
+    }
+
+    private fun viewModel() = ReportsViewModel(FakeTimeProvider(now, berlin), calendarRepository, groupRepository, exporter)
 
     @Test
     fun startsWithThisMonthSoFar() {
@@ -212,5 +227,72 @@ class ReportsViewModelTest {
         viewModel.onAction(ReportsAction.IncludeEventsToggle)
 
         assertFalse(viewModel.uiState.value.includeEvents)
+    }
+
+    @Test
+    fun creatingExportsTheSelectedCalendarsWithTheirEventsAndOpensTheReport() = runTest {
+        calendarRepository.storedSegments.value = mapOf(
+            lectures.id to listOf(
+                segment(lectures, 2, "2026-11-18T14:00", "2026-11-18T16:00").copy(title = "Algebra"),
+                segment(lectures, 1, "2026-11-02T10:00", "2026-11-02T12:00").copy(title = "Analysis"),
+            ),
+            study.id to listOf(segment(study, 4, "2026-11-03T09:00", "2026-11-03T10:00")),
+        )
+        val viewModel = viewModel()
+        viewModel.onAction(ReportsAction.CalendarToggle(study.id))
+
+        viewModel.onAction(ReportsAction.Create)
+
+        assertEquals(ReportsEvent.OpenReport("content://reports/report.pdf"), viewModel.events.first())
+        val document = exported.single()
+        assertEquals(LocalDateTime.parse("2026-11-01T00:00"), document.from)
+        assertEquals(LocalDateTime.parse("2026-11-18T14:37"), document.to)
+        assertEquals(LocalDateTime.parse("2026-11-18T14:37:52"), document.createdAt)
+        assertEquals(
+            listOf(
+                ReportCalendar(lectures.id, "Lectures", lectures.color, 2.hours + 37.minutes, university.id),
+                ReportCalendar(gym.id, "Gym", gym.color, Duration.ZERO),
+            ),
+            document.calendars,
+        )
+        assertEquals(listOf(ReportCalendarGroup(university.id, "University", null)), document.groups)
+        // In order and cut to the span
+        val events = document.events!!
+        assertEquals(listOf("Analysis", "Algebra"), events.map { it.title })
+        assertEquals(LocalDateTime.parse("2026-11-18T14:37"), events.last().end)
+        assertEquals(37.minutes, events.last().duration)
+        assertFalse(viewModel.uiState.value.isCreating)
+    }
+
+    @Test
+    fun aReportWithoutSingleEventsLeavesThemOut() = runTest {
+        val viewModel = viewModel()
+        viewModel.onAction(ReportsAction.IncludeEventsToggle)
+
+        viewModel.onAction(ReportsAction.Create)
+
+        viewModel.events.first()
+        assertNull(exported.single().events)
+    }
+
+    @Test
+    fun aFailedExportIsReported() = runTest {
+        exportFails = true
+        val viewModel = viewModel()
+
+        viewModel.onAction(ReportsAction.Create)
+
+        assertEquals(ReportsEvent.CreateFailed, viewModel.events.first())
+        assertFalse(viewModel.uiState.value.isCreating)
+    }
+
+    @Test
+    fun noReportWithoutAnyCalendar() {
+        val viewModel = viewModel()
+        listOf(lectures, study, gym).forEach { viewModel.onAction(ReportsAction.CalendarToggle(it.id)) }
+
+        assertFalse(viewModel.uiState.value.canCreate)
+        viewModel.onAction(ReportsAction.Create)
+        assertTrue(exported.isEmpty())
     }
 }

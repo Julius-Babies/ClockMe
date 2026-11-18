@@ -20,6 +20,9 @@ import es.jvbabi.clockme.ui.theme.CirclesTheme
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import kotlin.time.Duration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -53,7 +56,18 @@ class ReportsContentTest {
         compose.setContent {
             CirclesTheme(dynamicColor = false) {
                 ReportsContent(
-                    uiState = ReportsUiState(LocalDateTime.parse(from), LocalDateTime.parse(to), tree, deselected),
+                    uiState = ReportsUiState(
+                        from = LocalDateTime.parse(from),
+                        to = LocalDateTime.parse(to),
+                        calendars = tree,
+                        deselectedCalendarIds = deselected,
+                        preview = ReportPreview(
+                            calendars = listOf(lectures, study, gym)
+                                .filter { it.id !in deselected }
+                                .map { PreviewCalendar(it.id, it.color, Duration.ZERO) },
+                            eventCount = 0,
+                        ),
+                    ),
                     onAction = { actions += it },
                 )
             }
@@ -160,5 +174,21 @@ class ReportsContentTest {
         compose.onNodeWithTag(ReportsTestTags.INCLUDE_EVENTS).performScrollTo().assertIsOn().performClick()
 
         assertEquals(listOf<ReportsAction>(ReportsAction.IncludeEventsToggle), actions)
+    }
+
+    @Test
+    fun tappingCreateCreatesTheReport() {
+        setContent()
+
+        compose.onNodeWithTag(ReportsTestTags.CREATE).performScrollTo().assertIsEnabled().performClick()
+
+        assertEquals(listOf<ReportsAction>(ReportsAction.Create), actions)
+    }
+
+    @Test
+    fun noReportWithoutAnyCalendar() {
+        setContent(deselected = setOf(lectures.id, study.id, gym.id))
+
+        compose.onNodeWithTag(ReportsTestTags.CREATE).performScrollTo().assertIsNotEnabled()
     }
 }

@@ -22,7 +22,12 @@ data class ReportsUiState(
     val includeEvents: Boolean = true,
     /** `null` while it loads. */
     val preview: ReportPreview? = null,
+    val isCreating: Boolean = false,
 ) {
+    /** A report needs a valid span and at least one calendar, and only one is made at a time. */
+    val canCreate: Boolean
+        get() = isRangeValid && !isCreating && preview?.calendars?.isNotEmpty() == true
+
     /** A report needs its end after its start. */
     val isRangeValid: Boolean get() = from < to
 
@@ -85,4 +90,11 @@ sealed interface ReportsAction {
     data class GroupToggle(val groupId: Long) : ReportsAction
 
     data object IncludeEventsToggle : ReportsAction
+    data object Create : ReportsAction
+}
+
+sealed interface ReportsEvent {
+    /** The report is written; [uri] is its content URI, for an app to open. */
+    data class OpenReport(val uri: String) : ReportsEvent
+    data object CreateFailed : ReportsEvent
 }

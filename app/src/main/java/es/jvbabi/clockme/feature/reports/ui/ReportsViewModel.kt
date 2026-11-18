@@ -11,7 +11,15 @@ import es.jvbabi.clockme.data.group.CalendarGroup
 import es.jvbabi.clockme.data.group.CalendarGroupRepository
 import es.jvbabi.clockme.domain.calendar.clipTo
 import es.jvbabi.clockme.domain.calendar.coveredDuration
+import es.jvbabi.clockme.feature.reports.pdf.ReportCalendar
+import es.jvbabi.clockme.feature.reports.pdf.ReportCalendarGroup
+import es.jvbabi.clockme.feature.reports.pdf.ReportDocument
+import es.jvbabi.clockme.feature.reports.pdf.ReportEvent
+import es.jvbabi.clockme.feature.reports.pdf.ReportExporter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,8 +28,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
@@ -31,10 +41,14 @@ import kotlinx.datetime.toLocalDateTime
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReportsViewModel(
-    timeProvider: TimeProvider,
+    private val timeProvider: TimeProvider,
     calendarRepository: CalendarRepository,
     groupRepository: CalendarGroupRepository,
+    private val reportExporter: ReportExporter,
 ) : ViewModel() {
+
+    private val _events = Channel<ReportsEvent>(Channel.BUFFERED)
+    val events: Flow<ReportsEvent> = _events.receiveAsFlow()
 
     private val selection = MutableStateFlow(initialState(timeProvider))
 
@@ -51,6 +65,7 @@ class ReportsViewModel(
         .flatMapLatest { (from, to) ->
             if (from <= to) calendarRepository.observeEventSegments(from, to) else flowOf(emptyList())
         }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val uiState: StateFlow<ReportsUiState> = combine(selection, calendarTree, segments) { state, tree, segments ->
         val withTree = state.copy(calendars = tree)
@@ -69,6 +84,7 @@ class ReportsViewModel(
                 state.copy(deselectedCalendarIds = if (id in deselected) deselected - id else deselected + id)
             }
             ReportsAction.IncludeEventsToggle -> selection.update { it.copy(includeEvents = !it.includeEvents) }
+            ReportsAction.Create -> create()
             is ReportsAction.GroupToggle -> {
                 val state = uiState.value
                 val group = state.calendars?.groups?.find { it.id == action.groupId } ?: return
@@ -81,7 +97,94 @@ class ReportsViewModel(
         }
     }
 
+    private fun create() {
+        val state = uiState.value
+        val tree = state.calendars ?: return
+        if (!state.canCreate) return
+        selection.update { it.copy(isCreating = true) }
+        viewModelScope.launch {
+            try {
+                val timeZone = timeProvider.timeZone()
+                val createdAt = timeProvider.now().toLocalDateTime(timeZone)
+                val uri = reportExporter.export(buildDocument(state, tree, segments.value, timeZone, createdAt))
+                _events.send(ReportsEvent.OpenReport(uri))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _events.send(ReportsEvent.CreateFailed)
+            } finally {
+                selection.update { it.copy(isCreating = false) }
+            }
+        }
+    }
+
     internal companion object {
+        /** The selected calendars' parts of the [segments] within the span, by calendar. */
+        private fun clippedByCalendar(
+            state: ReportsUiState,
+            segments: List<EventSegment>,
+            timeZone: TimeZone,
+        ): Map<Long, List<EventSegment>> {
+            val from = state.from.toInstant(timeZone)
+            val to = state.to.toInstant(timeZone)
+            return segments
+                .filter { it.calendarId !in state.deselectedCalendarIds }
+                .mapNotNull { it.clipTo(from, to) }
+                .groupBy { it.calendarId }
+        }
+
+        /** The selected calendars in the order of the tree, each with the group it lies in. */
+        private fun selectedCalendars(state: ReportsUiState, tree: ReportCalendarTree): List<Pair<Calendar, ReportGroup?>> =
+            tree.groups.flatMap { group -> group.calendars.filter(state::isSelected).map { it to group } } +
+                tree.ungrouped.filter(state::isSelected).map { it to null }
+
+        fun buildDocument(
+            state: ReportsUiState,
+            tree: ReportCalendarTree,
+            segments: List<EventSegment>,
+            timeZone: TimeZone,
+            createdAt: LocalDateTime,
+        ): ReportDocument {
+            val byCalendar = clippedByCalendar(state, segments, timeZone)
+            val selected = selectedCalendars(state, tree)
+            val calendars = selected.map { (calendar, group) ->
+                ReportCalendar(
+                    id = calendar.id,
+                    name = calendar.name,
+                    color = calendar.color,
+                    duration = byCalendar[calendar.id].orEmpty().coveredDuration(),
+                    groupId = group?.id,
+                )
+            }
+            val groups = selected.mapNotNull { it.second }.distinct()
+                .map { ReportCalendarGroup(it.id, it.name, it.color) }
+            val events = if (!state.includeEvents) null else {
+                val byId = selected.associate { (calendar, _) -> calendar.id to calendar }
+                byCalendar.values.flatten()
+                    .mapNotNull { segment ->
+                        val calendar = byId[segment.calendarId] ?: return@mapNotNull null
+                        ReportEvent(
+                            date = segment.date,
+                            start = segment.start.toLocalDateTime(timeZone),
+                            end = segment.end.toLocalDateTime(timeZone),
+                            title = segment.title,
+                            color = calendar.color,
+                            calendarName = calendar.name,
+                            duration = segment.end - segment.start,
+                        )
+                    }
+                    .sortedWith(compareBy({ it.start }, { it.end }, { it.title }))
+            }
+            return ReportDocument(
+                from = state.from,
+                to = state.to,
+                createdAt = LocalDateTime(createdAt.date, LocalTime(createdAt.hour, createdAt.minute, createdAt.second)),
+                calendars = calendars,
+                groups = groups,
+                events = events,
+            )
+        }
+
         /** This month so far: from midnight on its first up to the current minute. */
         fun initialState(timeProvider: TimeProvider): ReportsUiState {
             val now = timeProvider.now().toLocalDateTime(timeProvider.timeZone())
@@ -98,20 +201,15 @@ class ReportsViewModel(
             timeZone: TimeZone,
         ): ReportPreview {
             if (!state.isRangeValid) return ReportPreview(emptyList(), eventCount = 0)
-            val from = state.from.toInstant(timeZone)
-            val to = state.to.toInstant(timeZone)
-            val byCalendar = segments.mapNotNull { it.clipTo(from, to) }.groupBy { it.calendarId }
-            fun previewOf(calendar: Calendar, groupId: Long?) = PreviewCalendar(
-                calendarId = calendar.id,
-                color = calendar.color,
-                duration = byCalendar[calendar.id].orEmpty().coveredDuration(),
-                groupId = groupId,
-            )
-            val grouped = tree.groups.flatMap { group ->
-                group.calendars.filter(state::isSelected).map { previewOf(it, group.id) }
+            val byCalendar = clippedByCalendar(state, segments, timeZone)
+            val calendars = selectedCalendars(state, tree).map { (calendar, group) ->
+                PreviewCalendar(
+                    calendarId = calendar.id,
+                    color = calendar.color,
+                    duration = byCalendar[calendar.id].orEmpty().coveredDuration(),
+                    groupId = group?.id,
+                )
             }
-            val ungrouped = tree.ungrouped.filter(state::isSelected).map { previewOf(it, null) }
-            val calendars = grouped + ungrouped
             val selectedIds = calendars.map { it.calendarId }.toSet()
             val eventCount = byCalendar.filterKeys { it in selectedIds }.values.flatten().map { it.eventId }.distinct().size
             return ReportPreview(calendars, eventCount)

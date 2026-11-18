@@ -26,14 +26,21 @@
     <string name="reports_expand_group">Show calendars</string>
     <string name="reports_collapse_group">Hide calendars</string>
     <string name="reports_preview">Preview</string>
+    <string name="reports_create">Create report</string>
+    <string name="reports_create_failed">The report could not be created.</string>
+    <string name="reports_pdf_title" translatable="false">Circles Report</string>
+    <string name="reports_pdf_created">Created: %1$s</string>
+    <string name="reports_pdf_page">Page %1$d of %2$d</string>
+    <string name="reports_pdf_no_events">No events in this span.</string>
+    <string name="reports_pdf_no_time">No time in this span.</string>
     <string name="reports_include_events">List single events</string>
     <string name="reports_include_events_description">Every event with its time, not just the time per calendar</string>
     <plurals name="reports_event_count">
-        <item quantity="one">%d event</item>
+        <item quantity="one">one event</item>
         <item quantity="other">%d events</item>
     </plurals>
     <plurals name="reports_calendar_count">
-        <item quantity="one">in %d calendar</item>
+        <item quantity="one">in one calendar</item>
         <item quantity="other">in %d calendars</item>
     </plurals>
     <string name="dialog_ok" translatable="false">OK</string>

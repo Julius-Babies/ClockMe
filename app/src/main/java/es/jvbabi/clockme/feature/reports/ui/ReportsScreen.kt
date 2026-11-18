@@ -1,90 +1,105 @@
 package es.jvbabi.clockme.feature.reports.ui
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.text.format.DateFormat
 import android.text.format.DateUtils
+import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.basicMarquee
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.height
-import androidx.compose.material3.TimeInput
-import androidx.compose.material3.TimePickerDialog
-import androidx.compose.material3.TimePickerDialogDefaults
-import androidx.compose.material3.TimePickerDisplayMode
-import com.phosphor.icons.regular.ArrowRight
-import com.phosphor.icons.regular.Clock
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.TriStateCheckbox
-import androidx.compose.runtime.key
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.state.ToggleableState
-import androidx.compose.ui.unit.Dp
-import com.phosphor.icons.PhIcons
-import com.phosphor.icons.regular.CaretDown
-import es.jvbabi.clockme.data.calendar.Calendar
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimeInput
 import androidx.compose.material3.TimePicker
+import androidx.compose.material3.TimePickerDialog
+import androidx.compose.material3.TimePickerDialogDefaults
+import androidx.compose.material3.TimePickerDisplayMode
+import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.phosphor.icons.PhIcons
+import com.phosphor.icons.regular.ArrowRight
+import com.phosphor.icons.regular.CaretDown
+import com.phosphor.icons.regular.Clock
+import com.phosphor.icons.regular.FilePdf
 import es.jvbabi.clockme.R
+import es.jvbabi.clockme.core.ui.ObserveAsEvents
 import es.jvbabi.clockme.core.ui.chart.DonutChart
 import es.jvbabi.clockme.core.ui.chart.DonutGroup
 import es.jvbabi.clockme.core.ui.chart.DonutSlice
 import es.jvbabi.clockme.core.ui.formatDuration
 import es.jvbabi.clockme.core.ui.rememberTimeFormatter
+import es.jvbabi.clockme.data.calendar.Calendar
 import es.jvbabi.clockme.navigation.LocalBottomNavBarHeight
 import es.jvbabi.clockme.ui.theme.CirclesTheme
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
@@ -92,13 +107,18 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
 import org.koin.androidx.compose.koinViewModel
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.hours
-import kotlin.time.Instant
 
 @Composable
 fun ReportsScreen(viewModel: ReportsViewModel = koinViewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    ObserveAsEvents(viewModel.events) { event ->
+        when (event) {
+            is ReportsEvent.OpenReport -> openReport(context, event.uri.toUri())
+            ReportsEvent.CreateFailed ->
+                Toast.makeText(context, R.string.reports_create_failed, Toast.LENGTH_LONG).show()
+        }
+    }
     ReportsContent(uiState = uiState, onAction = viewModel::onAction)
 }
 
@@ -110,10 +130,29 @@ object ReportsTestTags {
     const val PREVIEW_RING = "reports_preview_ring"
     const val PREVIEW_TOTAL = "reports_preview_total"
     const val INCLUDE_EVENTS = "reports_include_events"
+    const val CREATE = "reports_create"
     fun group(id: Long) = "reports_group_$id"
     fun groupCheckbox(id: Long) = "reports_group_checkbox_$id"
     fun calendar(id: Long) = "reports_calendar_$id"
 }
+
+/** Opens the PDF in a viewer, or offers to share it if there is none. */
+private fun openReport(context: Context, uri: Uri) {
+    val view = Intent(Intent.ACTION_VIEW)
+        .setDataAndType(uri, PDF_MIME_TYPE)
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    try {
+        context.startActivity(view)
+    } catch (_: ActivityNotFoundException) {
+        val share = Intent(Intent.ACTION_SEND)
+            .setType(PDF_MIME_TYPE)
+            .putExtra(Intent.EXTRA_STREAM, uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        context.startActivity(Intent.createChooser(share, null))
+    }
+}
+
+private const val PDF_MIME_TYPE = "application/pdf"
 
 /** Which part of the range a picker dialog is open for. */
 private enum class RangePicker { FROM_DATE, FROM_TIME, TO_DATE, TO_TIME }
@@ -191,6 +230,30 @@ internal fun ReportsContent(
                 modifier = Modifier.padding(top = 8.dp),
             )
             PreviewCard(uiState, onAction)
+            Button(
+                onClick = { onAction(ReportsAction.Create) },
+                enabled = uiState.canCreate,
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+                    .testTag(ReportsTestTags.CREATE),
+            ) {
+                if (uiState.isCreating) {
+                    CircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        color = LocalContentColor.current,
+                        modifier = Modifier.size(20.dp),
+                    )
+                } else {
+                    Icon(PhIcons.Regular.FilePdf, contentDescription = null, modifier = Modifier.size(20.dp))
+                }
+                Text(
+                    text = stringResource(R.string.reports_create),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(start = 10.dp),
+                )
+            }
         }
     }
 
