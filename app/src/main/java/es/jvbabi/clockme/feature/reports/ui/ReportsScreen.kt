@@ -3,6 +3,31 @@ package es.jvbabi.clockme.feature.reports.ui
 import android.text.format.DateFormat
 import android.text.format.DateUtils
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
+import androidx.compose.material3.TriStateCheckbox
+import androidx.compose.runtime.key
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.unit.Dp
+import com.phosphor.icons.PhIcons
+import com.phosphor.icons.regular.CaretDown
+import es.jvbabi.clockme.data.calendar.Calendar
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -65,6 +90,9 @@ object ReportsTestTags {
     const val FROM_TIME = "reports_from_time"
     const val TO_DATE = "reports_to_date"
     const val TO_TIME = "reports_to_time"
+    fun group(id: Long) = "reports_group_$id"
+    fun groupCheckbox(id: Long) = "reports_group_checkbox_$id"
+    fun calendar(id: Long) = "reports_calendar_$id"
 }
 
 /** Which part of the range a picker dialog is open for. */
@@ -121,6 +149,14 @@ internal fun ReportsContent(
                     }
                 }
             }
+            uiState.calendars?.let { tree ->
+                Text(
+                    text = stringResource(R.string.reports_calendars),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                CalendarTreeCard(uiState, tree, onAction)
+            }
         }
     }
 
@@ -132,6 +168,164 @@ internal fun ReportsContent(
         RangePicker.TO_TIME -> TimePickerDialog(uiState.to.time, dismiss) { onAction(ReportsAction.ToTimeChange(it)) }
         null -> Unit
     }
+}
+
+/**
+ * The groups with their calendars folded away beneath them, then the calendars in no group. A
+ * group's box takes in or leaves out all its calendars at once and shows when only some are in.
+ */
+@Composable
+private fun CalendarTreeCard(
+    uiState: ReportsUiState,
+    tree: ReportCalendarTree,
+    onAction: (ReportsAction) -> Unit,
+) {
+    var expandedGroups by rememberSaveable { mutableStateOf(emptySet<Long>()) }
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(vertical = 8.dp)) {
+            if (tree.isEmpty) {
+                Text(
+                    text = stringResource(R.string.reports_no_calendars),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+            tree.groups.forEach { group ->
+                key("group-${group.id}") {
+                    val expanded = group.id in expandedGroups
+                    GroupRow(
+                        group = group,
+                        selection = uiState.selectionOf(group),
+                        selectedCount = group.calendars.count(uiState::isSelected),
+                        expanded = expanded,
+                        onExpandToggle = {
+                            expandedGroups = if (expanded) expandedGroups - group.id else expandedGroups + group.id
+                        },
+                        onToggle = { onAction(ReportsAction.GroupToggle(group.id)) },
+                    )
+                    AnimatedVisibility(
+                        visible = expanded,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut(),
+                    ) {
+                        Column {
+                            group.calendars.forEach { calendar ->
+                                CalendarRow(
+                                    calendar = calendar,
+                                    checked = uiState.isSelected(calendar),
+                                    onToggle = { onAction(ReportsAction.CalendarToggle(calendar.id)) },
+                                    indent = TREE_INDENT,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            tree.ungrouped.forEach { calendar ->
+                key("calendar-${calendar.id}") {
+                    CalendarRow(
+                        calendar = calendar,
+                        checked = uiState.isSelected(calendar),
+                        onToggle = { onAction(ReportsAction.CalendarToggle(calendar.id)) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** How far a group's calendars sit in under it: past the caret, so their dots line up with the group's. */
+private val TREE_INDENT = 40.dp
+
+@Composable
+private fun GroupRow(
+    group: ReportGroup,
+    selection: GroupSelection,
+    selectedCount: Int,
+    expanded: Boolean,
+    onExpandToggle: () -> Unit,
+    onToggle: () -> Unit,
+) {
+    val caretRotation by animateFloatAsState(if (expanded) 0f else -90f, label = "caret")
+    val expandLabel = stringResource(if (expanded) R.string.reports_collapse_group else R.string.reports_expand_group)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = expandLabel, onClick = onExpandToggle)
+            .testTag(ReportsTestTags.group(group.id))
+            .padding(start = 8.dp, end = 4.dp),
+    ) {
+        Icon(
+            imageVector = PhIcons.Regular.CaretDown,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(32.dp).padding(6.dp).rotate(caretRotation),
+        )
+        ColorDot(group.color, Modifier.padding(start = 8.dp))
+        Column(Modifier.weight(1f).padding(start = 16.dp)) {
+            Text(text = group.name, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = stringResource(R.string.reports_group_count, selectedCount, group.calendars.size),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TriStateCheckbox(
+            state = when (selection) {
+                GroupSelection.ALL -> ToggleableState.On
+                GroupSelection.SOME -> ToggleableState.Indeterminate
+                GroupSelection.NONE -> ToggleableState.Off
+            },
+            onClick = onToggle,
+            modifier = Modifier.testTag(ReportsTestTags.groupCheckbox(group.id)),
+        )
+    }
+}
+
+@Composable
+private fun CalendarRow(
+    calendar: Calendar,
+    checked: Boolean,
+    onToggle: () -> Unit,
+    indent: Dp = 0.dp,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(value = checked, role = Role.Checkbox, onValueChange = { onToggle() })
+            .testTag(ReportsTestTags.calendar(calendar.id))
+            .padding(start = 16.dp + indent, end = 4.dp, top = 4.dp, bottom = 4.dp),
+    ) {
+        ColorDot(calendar.color)
+        Text(
+            text = calendar.name,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f).padding(start = 16.dp),
+        )
+        // The row handles the click
+        Checkbox(checked = checked, onCheckedChange = null, modifier = Modifier.padding(12.dp))
+    }
+}
+
+@Composable
+private fun ColorDot(color: Int?, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(16.dp)
+            .then(
+                if (color != null) {
+                    Modifier.background(Color(color), CircleShape)
+                } else {
+                    Modifier.border(1.5.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                },
+            ),
+    )
 }
 
 /** One end of the range: its label, then the date and the time, each tappable to change it. */
@@ -255,6 +449,21 @@ private fun ReportsContentPreview() {
             uiState = ReportsUiState(
                 from = LocalDateTime.parse("2026-11-18T00:00"),
                 to = LocalDateTime.parse("2026-11-18T14:30"),
+                calendars = ReportCalendarTree(
+                    groups = listOf(
+                        ReportGroup(
+                            id = 1,
+                            name = "University",
+                            color = 0xFF8E24AA.toInt(),
+                            calendars = listOf(
+                                Calendar(1, "Lectures", 0xFF4285F4.toInt()),
+                                Calendar(2, "Study", 0xFF0B8043.toInt()),
+                            ),
+                        ),
+                    ),
+                    ungrouped = listOf(Calendar(3, "Gym", 0xFFF4511E.toInt())),
+                ),
+                deselectedCalendarIds = setOf(2),
             ),
             onAction = {},
         )

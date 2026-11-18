@@ -1,32 +1,64 @@
 package es.jvbabi.clockme.feature.reports.ui
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import es.jvbabi.clockme.core.time.TimeProvider
+import es.jvbabi.clockme.data.calendar.CalendarAccount
+import es.jvbabi.clockme.data.calendar.CalendarRepository
+import es.jvbabi.clockme.data.group.CalendarGroup
+import es.jvbabi.clockme.data.group.CalendarGroupRepository
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.toLocalDateTime
 
-class ReportsViewModel(timeProvider: TimeProvider) : ViewModel() {
+class ReportsViewModel(
+    timeProvider: TimeProvider,
+    calendarRepository: CalendarRepository,
+    groupRepository: CalendarGroupRepository,
+) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(initialState(timeProvider))
-    val uiState: StateFlow<ReportsUiState> = _uiState.asStateFlow()
+    private val selection = MutableStateFlow(initialState(timeProvider))
+
+    private val calendarTree = combine(
+        calendarRepository.observeActiveCalendars(),
+        groupRepository.observeGroups(),
+        ::buildCalendarTree,
+    )
+
+    val uiState: StateFlow<ReportsUiState> = combine(selection, calendarTree) { state, tree ->
+        state.copy(calendars = tree)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, selection.value)
 
     fun onAction(action: ReportsAction) {
-        _uiState.update { state ->
-            when (action) {
-                is ReportsAction.FromDateChange -> state.copy(from = LocalDateTime(action.date, state.from.time))
-                is ReportsAction.FromTimeChange -> state.copy(from = LocalDateTime(state.from.date, action.time))
-                is ReportsAction.ToDateChange -> state.copy(to = LocalDateTime(action.date, state.to.time))
-                is ReportsAction.ToTimeChange -> state.copy(to = LocalDateTime(state.to.date, action.time))
+        when (action) {
+            is ReportsAction.FromDateChange -> selection.update { it.copy(from = LocalDateTime(action.date, it.from.time)) }
+            is ReportsAction.FromTimeChange -> selection.update { it.copy(from = LocalDateTime(it.from.date, action.time)) }
+            is ReportsAction.ToDateChange -> selection.update { it.copy(to = LocalDateTime(action.date, it.to.time)) }
+            is ReportsAction.ToTimeChange -> selection.update { it.copy(to = LocalDateTime(it.to.date, action.time)) }
+            is ReportsAction.CalendarToggle -> selection.update { state ->
+                val id = action.calendarId
+                val deselected = state.deselectedCalendarIds
+                state.copy(deselectedCalendarIds = if (id in deselected) deselected - id else deselected + id)
+            }
+            is ReportsAction.GroupToggle -> {
+                val state = uiState.value
+                val group = state.calendars?.groups?.find { it.id == action.groupId } ?: return
+                val ids = group.calendars.map { it.id }.toSet()
+                val allIn = state.selectionOf(group) == GroupSelection.ALL
+                selection.update {
+                    it.copy(deselectedCalendarIds = if (allIn) it.deselectedCalendarIds + ids else it.deselectedCalendarIds - ids)
+                }
             }
         }
     }
 
-    private companion object {
+    internal companion object {
         /** Today so far: from midnight up to the current minute. */
         fun initialState(timeProvider: TimeProvider): ReportsUiState {
             val now = timeProvider.now().toLocalDateTime(timeProvider.timeZone())
@@ -34,6 +66,16 @@ class ReportsViewModel(timeProvider: TimeProvider) : ViewModel() {
                 from = LocalDateTime(now.date, LocalTime(0, 0)),
                 to = LocalDateTime(now.date, LocalTime(now.hour, now.minute)),
             )
+        }
+
+        fun buildCalendarTree(activeAccounts: List<CalendarAccount>, groups: List<CalendarGroup>): ReportCalendarTree {
+            val active = activeAccounts.flatMap { it.calendars }.distinctBy { it.id }.sortedBy { it.name.lowercase() }
+            val reportGroups = groups.mapNotNull { group ->
+                val calendars = active.filter { it.id in group.calendarIds }
+                if (calendars.isEmpty()) null else ReportGroup(group.id, group.name, group.color, calendars)
+            }
+            val grouped = reportGroups.flatMap { it.calendars }.map { it.id }.toSet()
+            return ReportCalendarTree(groups = reportGroups, ungrouped = active.filter { it.id !in grouped })
         }
     }
 }
